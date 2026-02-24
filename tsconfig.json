@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    /* 1. Progetto & Output */
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "sourceMap": true, // Fondamentale per il debug nel browser (F12)
+    "removeComments": true, // Pulisce il codice finale
+
+    /* 2. Moduli & Target (Il cuore del sistema) */
+    "target": "ES2022", // Javascript moderno supportato da tutti i browser recenti
+    "module": "NodeNext", // Genera import/export standard (ESM)
+    "moduleResolution": "NodeNext", // Ti obbliga a mettere l'estensione .js negli import
+
+    /* 3. Strictness (Sicurezza) */
+    "strict": true, // Attiva tutti i controlli base (noImplicitAny, ecc.)
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* 4. Interop & Librerie */
+    "esModuleInterop": true,
+    "skipLibCheck": true, // Velocizza la compilazione ignorando i file .d.ts esterni
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["DOM", "ES2022"] // Include i tipi per window, document, canvas, ecc.
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

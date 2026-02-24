@@ -1,0 +1,4 @@
+# The destination folder of the compiled scripts
+/dist/
+
+/src/node_modules/
