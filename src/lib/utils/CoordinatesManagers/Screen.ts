@@ -19,7 +19,6 @@ export default class Screen {
   // CRITICAL: We reuse these exact instances for every single vertex to avoid memory leaks.
   private static temp_res: Vector4 = new Vector4(0, 0, 0, 1);
   private static temp_v4: Vector4 = new Vector4(0, 0, 0, 1);
-  private static temp_v2: Vector2 = new Vector2();
 
   /**
    * Retrieves the Singleton instance.
@@ -83,11 +82,11 @@ export default class Screen {
 
   /**
    * Projects a 3D point into the 2D space using the projection matrix.
-   * Uses internal scratchpads to prevent memory allocation.
+   * Uses internal scratchpads to prevent memory allocation and instead of returning a new Vector, it modifies a external pointer.
    * @param p The 3D point in world/camera space.
-   * @returns The projected 2D point (reference to internal scratchpad).
+   * @param out The 2D projected point
    */
-  public static project(p: Vector3): Vector2 {
+  public static project(p: Vector3, out: Vector2) {
     // 1. Load data into temp vector
     this.temp_v4.x = p.x;
     this.temp_v4.y = p.y;
@@ -103,14 +102,12 @@ export default class Screen {
 
     // 3. Perform Perspective Divide (if w is not 0)
     if (this.temp_res.w !== 0) {
-      this.temp_v2.x = this.temp_res.x / this.temp_res.w;
-      this.temp_v2.y = this.temp_res.y / this.temp_res.w;
+      out.x = this.temp_res.x / this.temp_res.w;
+      out.y = this.temp_res.y / this.temp_res.w;
     } else {
-      this.temp_v2.x = this.temp_res.x;
-      this.temp_v2.y = this.temp_res.y;
+      out.x = this.temp_res.x;
+      out.y = this.temp_res.y;
     }
-
-    return this.temp_v2;
   }
 
   /**

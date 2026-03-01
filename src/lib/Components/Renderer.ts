@@ -3,6 +3,7 @@ import GameObject from "../../GameObjects/GameObject.js";
 import Engine from "../Engine.js";
 import Mesh from "../Meshes/Mesh.js";
 import Screen from "../utils/CoordinatesManagers/Screen.js";
+import { ProjectedVertex } from "../utils/Types.js";
 import Vector2 from "../utils/Vectors/Vector2.js";
 import Vector3 from "../utils/Vectors/Vector3.js";
 
@@ -14,57 +15,56 @@ type RenderableTriangle = {
   avgDepth: number;
 };
 
-type ProjectedVertex = { position: Vector2; depth: number }; // Projected vertex with the depth available for rendering
-
 export default class Renderer {
   private gameObject: GameObject;
   public mesh: Mesh;
+  // Vector used for the projection pipeline, allocating it here and mutating it's state on every render, avoiding memory leak.
+  private workVec: Vector3 = Vector3.zero;
 
   constructor(gameObject: GameObject, mesh: Mesh) {
     this.gameObject = gameObject;
     this.mesh = mesh;
   }
 
-  update = () => {
+  update() {
     const projectedVertexes = this.getLocalVertexes();
     const trianglesToDraw: RenderableTriangle[] =
       this.getTriangles(projectedVertexes);
     this.render(trianglesToDraw);
-  };
+  }
 
   /**
    * Projects the vertexes of the mesh into the screen
    * @returns an array of projected vertexes with their depth available
    */
   private getLocalVertexes(): ProjectedVertex[] {
-    // Vertexes projected into the screen (from 3D points to 2D points)
-    const projectedVertexes: ProjectedVertex[] = [];
     const t = this.gameObject.transform; // Short references to the transform
 
-    for (const localVertex of this.mesh.vertexes) {
-      // Temp variable for the position, so all of it's will be modified at once
-      let workVec = new Vector3(
+    for (let i = 0; i < this.mesh.vertexes.length; i++) {
+      const localVertex = this.mesh.vertexes[i];
+      // Internal temp variable for the position, so all of it's will be modified at once, mutated for each vertex.
+      this.workVec = new Vector3(
         localVertex.x * t.size.x,
         localVertex.y * t.size.y,
         localVertex.z * t.size.z,
       );
 
       // ROTATE
-      workVec.rotateZ(t.rotation.z);
-      workVec.rotateX(t.rotation.x);
-      workVec.rotateY(t.rotation.y);
+      this.workVec.rotateZ(t.rotation.z);
+      this.workVec.rotateX(t.rotation.x);
+      this.workVec.rotateY(t.rotation.y);
 
       // TRANSLATE
-      workVec = Vector3.sum(workVec, t.position);
+      this.workVec = Vector3.sum(this.workVec, t.position);
 
       // PROJECT TO SCREEN
-      const screenPos = Screen.toScreen(Screen.project(workVec));
-
-      projectedVertexes.push({ position: screenPos, depth: workVec.z });
+      Screen.project(this.workVec, this.mesh.projectedVertexes[i].position);
+      Screen.toScreen(this.mesh.projectedVertexes[i].position);
+      this.mesh.projectedVertexes[i].depth = this.workVec.z;
 
       // this.point(screenPos);
     }
-    return projectedVertexes;
+    return this.mesh.projectedVertexes;
   }
   /**
    * Takes the vertices projected into the screen and creates an array of triangles that will constitute the mesh,

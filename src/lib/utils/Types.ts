@@ -1,4 +1,5 @@
 import Transform from "../Components/Transform.js";
+import Vector2 from "./Vectors/Vector2.js";
 
 export type Vertexes = {
   transform: Transform;
@@ -15,3 +16,5 @@ export type ScreenConfig = {
   z_near: number;
   z_far: number;
 };
+
+export type ProjectedVertex = { position: Vector2; depth: number }; // Projected vertex with the depth available for rendering
