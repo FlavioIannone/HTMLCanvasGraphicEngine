@@ -1,7 +1,7 @@
 import Renderer from "../lib/Components/Renderer.js";
 import Transform from "../lib/Components/Transform.js";
 import Mesh from "../lib/Meshes/Mesh.js";
-import Vector3 from "../lib/utils/Vector3.js";
+import Vector3 from "../lib/utils/Vectors/Vector3.js";
 
 /**
  * Represents the base entity in the scene.
@@ -22,24 +22,17 @@ export default class GameObject {
 
   /**
    * Creates a new GameObject instance.
-   * @param context - The 2D rendering context of the canvas.
    * @param mesh - The geometric data (vertices/triangles) to render.
    * @param position - Initial world position.
    * @param rotation - Initial Euler rotation angles.
    * @param size - Initial scale factors.
    */
-  constructor(
-    context: CanvasRenderingContext2D,
-    mesh: Mesh,
-    position: Vector3,
-    rotation: Vector3,
-    size: Vector3,
-  ) {
+  constructor(mesh: Mesh, position: Vector3, rotation: Vector3, size: Vector3) {
     // Initialize the Transform component to handle spatial logic
     this.transform = new Transform(position, rotation, size);
 
     // Initialize the Renderer component, linking it to this object's transform
-    this.renderer = new Renderer(this, context, mesh);
+    this.renderer = new Renderer(this, mesh);
   }
 
   /**

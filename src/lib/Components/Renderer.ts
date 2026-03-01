@@ -1,8 +1,10 @@
 import config from "../../game.config.js";
 import GameObject from "../../GameObjects/GameObject.js";
+import Engine from "../Engine.js";
 import Mesh from "../Meshes/Mesh.js";
-import { Vector2 } from "../utils/Types.js";
-import Vector3 from "../utils/Vector3.js";
+import Screen from "../utils/CoordinatesManagers/Screen.js";
+import Vector2 from "../utils/Vectors/Vector2.js";
+import Vector3 from "../utils/Vectors/Vector3.js";
 
 // Renderable triangle with an average depth
 type RenderableTriangle = {
@@ -15,17 +17,11 @@ type RenderableTriangle = {
 type ProjectedVertex = { position: Vector2; depth: number }; // Projected vertex with the depth available for rendering
 
 export default class Renderer {
-  private context: CanvasRenderingContext2D;
   private gameObject: GameObject;
   public mesh: Mesh;
 
-  constructor(
-    gameObject: GameObject,
-    context: CanvasRenderingContext2D,
-    mesh: Mesh,
-  ) {
+  constructor(gameObject: GameObject, mesh: Mesh) {
     this.gameObject = gameObject;
-    this.context = context;
     this.mesh = mesh;
   }
 
@@ -62,7 +58,7 @@ export default class Renderer {
       workVec = Vector3.sum(workVec, t.position);
 
       // PROJECT TO SCREEN
-      const screenPos = this.toScreen(this.project(workVec));
+      const screenPos = Screen.toScreen(Screen.project(workVec));
 
       projectedVertexes.push({ position: screenPos, depth: workVec.z });
 
@@ -109,14 +105,14 @@ export default class Renderer {
    */
   private render(trianglesToDraw: RenderableTriangle[]) {
     for (const tri of trianglesToDraw) {
-      this.context.beginPath(); // Prepare the context to render
-      this.context.moveTo(tri.p1.x, tri.p1.y); // Starting point
-      this.context.lineTo(tri.p2.x, tri.p2.y); // Move to the second point
-      this.context.lineTo(tri.p3.x, tri.p3.y); // Move to the third point
-      this.context.closePath(); // Close the path
+      Engine.context.beginPath(); // Prepare the context to render
+      Engine.context.moveTo(tri.p1.x, tri.p1.y); // Starting point
+      Engine.context.lineTo(tri.p2.x, tri.p2.y); // Move to the second point
+      Engine.context.lineTo(tri.p3.x, tri.p3.y); // Move to the third point
+      Engine.context.closePath(); // Close the path
 
-      this.context.fillStyle = config.foregroundColor; // Set the color
-      this.context.fill(); // Finally draw the path
+      Engine.context.fillStyle = config.foregroundColor; // Set the color
+      Engine.context.fill(); // Finally draw the path
     }
   }
 
@@ -126,12 +122,12 @@ export default class Renderer {
    * @param p2 Second point
    */
   private line(p1: Vector2, p2: Vector2) {
-    this.context.strokeStyle = config.foregroundColor;
-    this.context.lineWidth = 2;
-    this.context.beginPath();
-    this.context.moveTo(p1.x, p1.y);
-    this.context.lineTo(p2.x, p2.y);
-    this.context.stroke();
+    Engine.context.strokeStyle = config.foregroundColor;
+    Engine.context.lineWidth = 2;
+    Engine.context.beginPath();
+    Engine.context.moveTo(p1.x, p1.y);
+    Engine.context.lineTo(p2.x, p2.y);
+    Engine.context.stroke();
   }
 
   /**
@@ -139,44 +135,12 @@ export default class Renderer {
    * @param p position in which the point should be drawn
    */
   private point = (p: Vector2) => {
-    this.context.fillStyle = config.foregroundColor;
-    this.context.fillRect(
+    Engine.context.fillStyle = config.foregroundColor;
+    Engine.context.fillRect(
       p.x - config.pointWidth / 2,
       p.y - config.pointWidth / 2,
       config.pointWidth,
       config.pointWidth,
     );
   };
-
-  /**
-   * Converts a point from Normalized Device Coordinates (NDC) to Screen Space (Pixels).
-   * * Input Assumption:
-   * The input point 'p' must be in the range [-1, 1].
-   * - (-1, -1) is Bottom-Left in 3D space.
-   * - (1, 1) is Top-Right in 3D space.
-   *
-   * Maps the point to the canvas pixel dimensions, handling the Y-axis inversion.
-   * @param p - A point in NDC space (x: -1 to 1, y: -1 to 1).
-   * @returns A point in Screen Space (x: 0 to width, y: 0 to height).
-   */
-  private toScreen(p: Vector2): Vector2 {
-    return {
-      x: ((p.x + 1) / 2) * config.width,
-      y: (1 - (p.y + 1) / 2) * config.height,
-    };
-  }
-
-  /**
-   * Projects a 3D point into the 2D space of the screen
-   * @param p point to project
-   * @returns the projected point
-   */
-  private project(p: Vector3): Vector2 {
-    if (p.z === 0) return { x: p.x, y: p.y };
-
-    return {
-      x: p.x / p.z,
-      y: p.y / p.z,
-    };
-  }
 }
