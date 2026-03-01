@@ -1,35 +1,57 @@
 import config from "./game.config.js";
+import Cube from "./GameObjects/Cube.js";
+import Engine from "./lib/Engine.js";
+import Screen from "./lib/utils/CoordinatesManagers/Screen.js";
 import Time from "./lib/utils/Time.js";
-
-const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
-if (!canvas) throw new Error("Canvas element not found");
-const ctx = canvas.getContext("2d");
-if (!ctx) throw new Error("Canvas context not found");
-canvas.width = config.width;
-canvas.height = config.height;
+import Vector3 from "./lib/utils/Vectors/Vector3.js";
 
 const clear = () => {
-  ctx.fillStyle = config.backgroundColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  Engine.context.fillStyle = config.backgroundColor;
+  Engine.context.fillRect(
+    0,
+    0,
+    config.screenConfig.width,
+    config.screenConfig.height,
+  );
 };
 
 // Awake is called before the game starts
 const awake = () => {
+  Engine.instantiate();
   Time.instantiate();
+  Screen.instantiate(Engine.context);
 };
 
 // Start is called only on the first frame
 const start = () => {
-  if (!Time.instance) {
-    console.log("Error, Time not instantiated.");
+  if (!Engine.instance) {
+    console.error("Error, Time not instantiated.");
     return;
   }
+  if (!Screen.instance) {
+    console.error("Error, Time not instantiated.");
+    return;
+  }
+  if (!Time.instance) {
+    console.error("Error, Time not instantiated.");
+    return;
+  }
+
+  window.addEventListener("resize", Engine.onWindowResize);
+  Engine.setCanvas();
 };
+
+const cube = new Cube(
+  new Vector3(0, 0, 4),
+  new Vector3(),
+  new Vector3(1, 1, 1),
+);
 
 // Update is called once for each frame
 const update = (time: number) => {
   clear();
   Time.update(time);
+  cube.update();
 
   requestAnimationFrame(update);
 };
