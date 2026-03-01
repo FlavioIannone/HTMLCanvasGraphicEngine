@@ -1,4 +1,4 @@
-import Vector3 from "../utils/Vector3.js";
+import Vector3 from "../utils/Vectors/Vector3.js";
 
 /**
  * Encapsulates the spatial state of a GameObject, including its translation,

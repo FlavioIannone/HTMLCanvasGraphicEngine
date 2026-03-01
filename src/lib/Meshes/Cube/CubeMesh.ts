@@ -1,6 +1,6 @@
-import { Triangle } from "../utils/Types.js";
-import Vector3 from "../utils/Vector3.js";
-import Mesh from "./Mesh.js";
+import { Triangle } from "../../utils/Types.js";
+import Vector3 from "../../utils/Vectors/Vector3.js";
+import Mesh from "../Mesh.js";
 
 export default class CubeMesh implements Mesh {
   vertexes: Vector3[];

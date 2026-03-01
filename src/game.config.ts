@@ -1,9 +1,23 @@
-const config = {
-  width: 900,
-  height: 900,
-  pointWidth: 2,
-  backgroundColor: "#292929",
-  foregroundColor: "#248000",
-  targetFPS: 60,
+import { ScreenConfig } from "./lib/utils/Types.js";
+
+type GameConfig = {
+  pointWidth: number;
+  backgroundColor: string;
+  foregroundColor: string;
+  screenConfig: ScreenConfig;
 };
+
+const config: GameConfig = {
+  pointWidth: 2,
+  backgroundColor: "#164757",
+  foregroundColor: "#000000",
+  screenConfig: {
+    width: 1200,
+    height: 900,
+    fov: 60,
+    z_far: 10,
+    z_near: 1,
+  },
+};
+
 export default config;
