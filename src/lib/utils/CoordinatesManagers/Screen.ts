@@ -1,4 +1,5 @@
 import config from "../../../game.config.js";
+import Engine from "../../Engine.js";
 import { Matrix4 } from "../Matrices/Matrix4.js";
 import Vector2 from "../Vectors/Vector2.js";
 import Vector3 from "../Vectors/Vector3.js";
@@ -46,6 +47,19 @@ export default class Screen {
    */
   public static updateProjectionMatrix() {
     this._projectionMatrix = this.getProjectionMatrix();
+  }
+
+  /**
+   * Clears the context, should be called at the starting of each frame
+   */
+  public static clear() {
+    Engine.context.fillStyle = config.backgroundColor;
+    Engine.context.fillRect(
+      0,
+      0,
+      config.screenConfig.width,
+      config.screenConfig.height,
+    );
   }
 
   /**

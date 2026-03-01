@@ -1,5 +1,6 @@
 import config from "../game.config.js";
 import Screen from "./utils/CoordinatesManagers/Screen.js";
+import Time from "./utils/Time.js";
 
 /**
  * Core Engine class responsible for managing the rendering context,
@@ -14,6 +15,8 @@ export default class Engine {
   // Dirty flag pattern: ensures expensive resize operations (matrix math and buffer reallocation)
   // are performed at most once per frame, regardless of how many resize events fire.
   private static _needsResize: boolean = true;
+  // The single instance of the Engine
+  private static _instance: Engine | null = null;
 
   /**
    * Gets the 2D rendering context.
@@ -41,9 +44,6 @@ export default class Engine {
     if (!Engine._instance) throw Error("Engine not initialized");
     return Engine._instance;
   }
-
-  // The single instance of the Engine
-  private static _instance: Engine | null = null;
 
   /**
    * Private constructor to enforce the Singleton pattern.
@@ -74,10 +74,40 @@ export default class Engine {
   }
 
   /**
+   * Called once before the first frame is rendered
+   */
+  public static awake() {
+    Engine.instantiate();
+    Time.instantiate();
+    Screen.instantiate();
+  }
+
+  /**
+   * Called only in the first frame
+   */
+  public static start() {
+    if (!Engine.instance) {
+      console.error("Error, Time not instantiated.");
+      return;
+    }
+    if (!Screen.instance) {
+      console.error("Error, Time not instantiated.");
+      return;
+    }
+    if (!Time.instance) {
+      console.error("Error, Time not instantiated.");
+      return;
+    }
+  }
+
+  /**
    * Called once per frame inside the main game loop.
+   * Calls the update methods of the utils singletons.
    * Checks for the dirty flag and processes delayed resizes.
    */
-  public static update() {
+  public static update(time: number) {
+    Screen.clear();
+    Time.update(time);
     if (Engine._needsResize) {
       Engine.setCanvas();
       Engine._needsResize = false;
