@@ -14,7 +14,7 @@ const config: GameConfig = {
   screenConfig: {
     width: 1200,
     height: 900,
-    fov: 60,
+    fov: 80,
     z_far: 10,
     z_near: 1,
   },

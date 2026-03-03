@@ -3,11 +3,15 @@ import GameObject from "../../GameObjects/GameObject.js";
 import Engine from "../Engine.js";
 import Mesh from "../Meshes/Mesh.js";
 import Screen from "../utils/CoordinatesManagers/Screen.js";
+import { Matrix4 } from "../utils/Matrices/Matrix4.js";
 import { ProjectedVertex } from "../utils/Types.js";
 import Vector2 from "../utils/Vectors/Vector2.js";
-import Vector3 from "../utils/Vectors/Vector3.js";
+import Vector4 from "../utils/Vectors/Vector4.js";
 
-// Renderable triangle with an average depth
+/**
+ * Represents a 2D triangle ready to be drawn on the canvas.
+ * Includes average depth for the Painter's Algorithm sorting.
+ */
 type RenderableTriangle = {
   p1: Vector2;
   p2: Vector2;
@@ -15,132 +19,139 @@ type RenderableTriangle = {
   avgDepth: number;
 };
 
+/**
+ * Handles the rendering pipeline for a specific GameObject.
+ * Transforms local mesh vertices into world space, projects them to screen space,
+ * and rasterizes the resulting triangles using an Object Pool for zero memory allocation.
+ */
 export default class Renderer {
   private gameObject: GameObject;
   public mesh: Mesh;
-  // Vector used for the projection pipeline, allocating it here and mutating it's state on every render, avoiding memory leak.
-  private workVec: Vector3 = Vector3.zero;
 
+  // Scratchpad vector used for the projection pipeline to avoid memory leaks.
+  private _workVec: Vector4 = new Vector4(0, 0, 0, 1);
+
+  // Object Pool: Pre-allocated array of triangles for the rendering pipeline.
+  private _trianglesToDraw: RenderableTriangle[] = [];
+
+  /**
+   * Initializes the Renderer for a specific GameObject and its Mesh.
+   * Pre-allocates memory for the rendering pipeline based on the mesh size.
+   * @param gameObject The owner of this renderer.
+   * @param mesh The 3D geometry to draw.
+   */
   constructor(gameObject: GameObject, mesh: Mesh) {
     this.gameObject = gameObject;
     this.mesh = mesh;
+
+    // PRE-ALLOCATION (Object Pool): Create the exact number of objects needed once.
+    for (let i = 0; i < this.mesh.triangles.length; i++) {
+      this._trianglesToDraw.push({
+        p1: new Vector2(),
+        p2: new Vector2(),
+        p3: new Vector2(),
+        avgDepth: 0,
+      });
+    }
   }
 
+  /**
+   * Main rendering loop execution. Called every frame.
+   */
   update() {
     const projectedVertexes = this.getLocalVertexes();
-    const trianglesToDraw: RenderableTriangle[] =
-      this.getTriangles(projectedVertexes);
+    const trianglesToDraw = this.getTriangles(projectedVertexes);
     this.render(trianglesToDraw);
   }
 
   /**
-   * Projects the vertexes of the mesh into the screen
-   * @returns an array of projected vertexes with their depth available
+   * Transforms and projects the mesh's local 3D vertices into 2D screen coordinates.
+   * @returns An array of projected vertices containing screen positions and Z-depth.
    */
   private getLocalVertexes(): ProjectedVertex[] {
-    const t = this.gameObject.transform; // Short references to the transform
+    const t = this.gameObject.transform;
+    const modelMatrix = t.getModelMatrix();
 
     for (let i = 0; i < this.mesh.vertexes.length; i++) {
       const localVertex = this.mesh.vertexes[i];
-      // Internal temp variable for the position, so all of it's will be modified at once, mutated for each vertex.
-      this.workVec = new Vector3(
-        localVertex.x * t.size.x,
-        localVertex.y * t.size.y,
-        localVertex.z * t.size.z,
-      );
 
-      // ROTATE
-      this.workVec.rotateZ(t.rotation.z);
-      this.workVec.rotateX(t.rotation.x);
-      this.workVec.rotateY(t.rotation.y);
+      // 1. Load the raw local 3D vertex into our scratchpad
+      this._workVec.x = localVertex.x;
+      this._workVec.y = localVertex.y;
+      this._workVec.z = localVertex.z;
+      this._workVec.w = 1;
 
-      // TRANSLATE
-      this.workVec = Vector3.sum(this.workVec, t.position);
+      // 2. Apply all spatial transformations in one single matrix multiplication
+      Matrix4.matrix4MultiplyVector4(this._workVec, modelMatrix, this._workVec);
 
-      // PROJECT TO SCREEN
-      Screen.project(this.workVec, this.mesh.projectedVertexes[i].position);
+      // 3. Project to Normalized Device Coordinates (NDC) and save Z for depth sorting
+      Screen.project(this._workVec, this.mesh.projectedVertexes[i].position);
+      this.mesh.projectedVertexes[i].depth = this._workVec.z;
+
+      // 4. Map NDC to actual Canvas pixel coordinates
       Screen.toScreen(this.mesh.projectedVertexes[i].position);
-      this.mesh.projectedVertexes[i].depth = this.workVec.z;
-
-      // this.point(screenPos);
     }
+
     return this.mesh.projectedVertexes;
   }
+
   /**
-   * Takes the vertices projected into the screen and creates an array of triangles that will constitute the mesh,
-   * for each triangle an average depth is provided to identify which are on top.
-   * @param projectedVertexes The projected vertexes
-   * @returns An array of triangles sorted by their depth and ready to be rendered
+   * Assembles projected vertices into 2D triangles and computes their average depth.
+   * Sorts the array so that further triangles are drawn first (Painter's Algorithm).
+   * Uses the pre-allocated Object Pool to achieve zero memory allocation per frame.
+   * @param projectedVertexes The array of fully transformed screen-space vertices.
+   * @returns An array of sorted triangles ready for rendering.
    */
   private getTriangles(
     projectedVertexes: ProjectedVertex[],
   ): RenderableTriangle[] {
-    const trianglesToDraw: RenderableTriangle[] = [];
+    // Iterate over the mesh faces and mutate the pre-allocated objects
+    for (let i = 0; i < this.mesh.triangles.length; i++) {
+      const triIndices = this.mesh.triangles[i];
 
-    for (const tri of this.mesh.triangles) {
-      // Get the three vertexes
-      const v1 = projectedVertexes[tri[0]];
-      const v2 = projectedVertexes[tri[1]];
-      const v3 = projectedVertexes[tri[2]];
+      const v1 = projectedVertexes[triIndices[0]];
+      const v2 = projectedVertexes[triIndices[1]];
+      const v3 = projectedVertexes[triIndices[2]];
 
-      // Calculate the average depth
-      const zDepth = (v1.depth + v2.depth + v3.depth) / 3;
+      // Grab the pooled object instead of creating a new one
+      const pooledTriangle = this._trianglesToDraw[i];
 
-      // Insert the triangle into the array
-      trianglesToDraw.push({
-        p1: v1.position,
-        p2: v2.position,
-        p3: v3.position,
-        avgDepth: zDepth,
-      });
+      // Mutate its properties via reference assignment
+      pooledTriangle.p1 = v1.position;
+      pooledTriangle.p2 = v2.position;
+      pooledTriangle.p3 = v3.position;
+
+      // Calculate and assign the average Z-depth
+      pooledTriangle.avgDepth = (v1.depth + v2.depth + v3.depth) / 3;
     }
-    // Sort the array, the ones that are placed farder from the screen should be rendered first
-    trianglesToDraw.sort((a, b) => b.avgDepth - a.avgDepth);
-    return trianglesToDraw;
+
+    // Sort descending: highest Z (furthest away) gets drawn first
+    this._trianglesToDraw.sort((a, b) => b.avgDepth - a.avgDepth);
+    return this._trianglesToDraw;
   }
 
   /**
-   * Renders the triangles in the screen.
-   * @param trianglesToDraw The triangles to render
+   * Rasterizes the sorted triangles onto the HTML Canvas.
+   * @param trianglesToDraw The sorted array of triangles.
    */
   private render(trianglesToDraw: RenderableTriangle[]) {
-    for (const tri of trianglesToDraw) {
-      Engine.context.beginPath(); // Prepare the context to render
-      Engine.context.moveTo(tri.p1.x, tri.p1.y); // Starting point
-      Engine.context.lineTo(tri.p2.x, tri.p2.y); // Move to the second point
-      Engine.context.lineTo(tri.p3.x, tri.p3.y); // Move to the third point
-      Engine.context.closePath(); // Close the path
+    for (let i = 0; i < trianglesToDraw.length; i++) {
+      const tri = trianglesToDraw[i];
 
-      Engine.context.fillStyle = config.foregroundColor; // Set the color
-      Engine.context.fill(); // Finally draw the path
+      Engine.context.beginPath();
+      Engine.context.moveTo(tri.p1.x, tri.p1.y);
+      Engine.context.lineTo(tri.p2.x, tri.p2.y);
+      Engine.context.lineTo(tri.p3.x, tri.p3.y);
+      Engine.context.closePath();
+
+      // Fill the triangle with the configured solid color
+      Engine.context.fillStyle = config.foregroundColor;
+      Engine.context.fill();
+
+      // Draw wireframe borders to distinguish faces of the same color
+      Engine.context.strokeStyle = "#000000";
+      Engine.context.lineWidth = 1;
+      Engine.context.stroke();
     }
   }
-
-  /**
-   * Draws a line from p1 to p2.
-   * @param p1 First point
-   * @param p2 Second point
-   */
-  private line(p1: Vector2, p2: Vector2) {
-    Engine.context.strokeStyle = config.foregroundColor;
-    Engine.context.lineWidth = 2;
-    Engine.context.beginPath();
-    Engine.context.moveTo(p1.x, p1.y);
-    Engine.context.lineTo(p2.x, p2.y);
-    Engine.context.stroke();
-  }
-
-  /**
-   * Draws a point
-   * @param p position in which the point should be drawn
-   */
-  private point = (p: Vector2) => {
-    Engine.context.fillStyle = config.foregroundColor;
-    Engine.context.fillRect(
-      p.x - config.pointWidth / 2,
-      p.y - config.pointWidth / 2,
-      config.pointWidth,
-      config.pointWidth,
-    );
-  };
 }

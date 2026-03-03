@@ -84,12 +84,12 @@ export default class Screen {
       (config.screenConfig.z_far - config.screenConfig.z_near);
 
     // Using 1D flat array mapping for performance (Row-Major)
-    m.matrix[0] = f / Screen.getAspectRatio(); // [0][0] - Scale X by aspect ratio
-    m.matrix[5] = f; // [1][1] - Scale Y by FOV
-    m.matrix[10] = lambda; // [2][2] - Scale Z to fit near/far planes
-    m.matrix[11] = -lambda * config.screenConfig.z_near; // [2][3] - Translate Z based on near plane
-    m.matrix[14] = 1; // [3][2] - Save Z into W for perspective divide
-    m.matrix[15] = 0; // [3][3] - Clear the default 1 from identity
+    m.entries[0] = f / Screen.getAspectRatio(); // [0][0] - Scale X by aspect ratio
+    m.entries[5] = f; // [1][1] - Scale Y by FOV
+    m.entries[10] = lambda; // [2][2] - Scale Z to fit near/far planes
+    m.entries[11] = -lambda * config.screenConfig.z_near; // [2][3] - Translate Z based on near plane
+    m.entries[14] = 1; // [3][2] - Save Z into W for perspective divide
+    m.entries[15] = 0; // [3][3] - Clear the default 1 from identity
 
     return m;
   }

@@ -39,7 +39,6 @@ export default class GameObject {
    * Called once per frame. Propagates the update cycle to all child components.
    */
   public update(): void {
-    this.transform.update();
     this.renderer.update();
   }
 }

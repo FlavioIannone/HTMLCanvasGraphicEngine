@@ -1,48 +1,166 @@
+import { Matrix4 } from "../utils/Matrices/Matrix4.js";
 import Vector3 from "../utils/Vectors/Vector3.js";
 
 /**
  * Encapsulates the spatial state of a GameObject, including its translation,
  * rotation, and scale within the 3D world.
+ * Manages a local Model Matrix and updates it only when transformations change.
  */
 export default class Transform {
   /** The absolute position of the object in world space. */
-  position: Vector3;
+  private _position: Vector3;
 
-  /** The rotation of the object represented as Euler angles (Pitch, Yaw, Roll). */
-  rotation: Vector3;
+  /** The rotation of the object represented as Euler angles (Pitch, Yaw, Roll) in radians. */
+  private _rotation: Vector3;
 
   /** The scale/dimensions of the object relative to its local origin. */
-  size: Vector3;
+  private _scale: Vector3;
+
+  // Internal matrices used to compose the final rotation
+  private _mX: Matrix4 = new Matrix4();
+  private _mY: Matrix4 = new Matrix4();
+  private _mZ: Matrix4 = new Matrix4();
+
+  // The final transformation matrix and its dirty flag
+  private _modelMatrix: Matrix4 = new Matrix4();
+  private _isDirty: boolean = true;
+
+  // Scratchpads to prevent Garbage Collection overhead during matrix computation
+  private _tempMatT: Matrix4 = new Matrix4();
+  private _tempMatR: Matrix4 = new Matrix4();
+  private _tempMatS: Matrix4 = new Matrix4();
 
   /**
+   * Initializes a new Transform.
+   * Performs a deep copy of the vectors to prevent external reference mutations
+   * from silently breaking the dirty flag logic.
    * @param position - Initial world coordinates.
    * @param rotation - Initial orientation in radians.
-   * @param size - Initial scale factors.
+   * @param scale - Initial scale factors.
    */
-  constructor(position: Vector3, rotation: Vector3, size: Vector3) {
-    this.position = position;
-    this.rotation = rotation;
-    this.size = size;
+  constructor(position: Vector3, rotation: Vector3, scale: Vector3) {
+    this._position = new Vector3(position.x, position.y, position.z);
+    this._rotation = new Vector3(rotation.x, rotation.y, rotation.z);
+    this._scale = new Vector3(scale.x, scale.y, scale.z);
+  }
+
+  // --- GETTERS ---
+  // WARNING: The returned Vector3 should be treated as READ-ONLY.
+  // Mutating its properties directly (e.g., position.x = 5) will bypass the dirty flag.
+
+  /** Gets the current position vector. Treat as read-only. */
+  public get position(): Readonly<Vector3> {
+    return this._position;
+  }
+
+  /** Gets the current rotation vector in Euler angles. Treat as read-only. */
+  public get rotation(): Readonly<Vector3> {
+    return this._rotation;
+  }
+
+  /** Gets the current scale vector. Treat as read-only. */
+  public get scale(): Readonly<Vector3> {
+    return this._scale;
+  }
+  public get position_clone(): Vector3 {
+    return new Vector3(this._position.x, this._position.y, this._position.z);
+  }
+
+  /** Gets the current rotation vector in Euler angles. Treat as read-only. */
+  public get rotation_clone(): Vector3 {
+    return new Vector3(this._rotation.x, this._rotation.y, this._rotation.z);
+  }
+
+  /** Gets the current scale vector. Treat as read-only. */
+  public get scale_clone(): Vector3 {
+    return new Vector3(this._scale.x, this.position.y, this.position.z);
+  }
+
+  // --- SETTERS ---
+  // These setters guarantee that assigning a new vector flags the matrix for an update.
+
+  /** Sets a new absolute position and marks the transform as dirty. */
+  public set position(v: Vector3) {
+    this._position.x = v.x;
+    this._position.y = v.y;
+    this._position.z = v.z;
+    this._isDirty = true;
+  }
+
+  /** Sets a new absolute rotation and marks the transform as dirty. */
+  public set rotation(r: Vector3) {
+    this._rotation.x = r.x;
+    this._rotation.y = r.y;
+    this._rotation.z = r.z;
+    this._isDirty = true;
+  }
+
+  /** Sets a new absolute scale and marks the transform as dirty. */
+  public set scale(s: Vector3) {
+    this._scale.x = s.x;
+    this._scale.y = s.y;
+    this._scale.z = s.z;
+    this._isDirty = true;
   }
 
   /**
-   * Lifecycle method called every frame to update transformation logic.
+   * Generates the world matrix (TRS) for this object.
+   * Leverages the dirty flag to only recompute mathematical operations when changes occur.
+   * * @returns The updated 4x4 Model Matrix.
    */
-  update(): void {}
+  public getModelMatrix(): Matrix4 {
+    if (this._isDirty) {
+      // 1. Generate individual transformation matrices
+      Matrix4.makeTranslationMatrix4(this._position, this._tempMatT);
+      Matrix4.makeXYZRotationMatrix4(
+        this._rotation,
+        this._mX,
+        this._mY,
+        this._mZ,
+        this._tempMatR,
+      );
+      Matrix4.makeScaleMatrix4(this._scale, this._tempMatS);
 
-  /**
-   * Sets the object's orientation.
-   * @param rotation - The new rotation vector to apply.
-   */
-  rotate(rotation: Vector3): void {
-    this.rotation = rotation;
+      // 2. Combine matrices in TRS order (Translation * Rotation * Scale)
+      // First: Rotation * Scale
+      Matrix4.multiplyMatrix4(
+        this._tempMatR,
+        this._tempMatS,
+        this._modelMatrix,
+      );
+
+      // Second: Translation * (Rotation * Scale)
+      Matrix4.multiplyMatrix4(
+        this._tempMatT,
+        this._modelMatrix,
+        this._modelMatrix,
+      );
+
+      // 3. Reset the flag until the next mutation
+      this._isDirty = false;
+    }
+    return this._modelMatrix;
   }
 
   /**
-   * Sets the object's position.
-   * @param position - The new position coordinates to apply.
+   * Shifts the object's position by the given delta vector.
+   * @param delta - The amount to move along the X, Y, and Z axes.
    */
-  translate(position: Vector3): void {
-    this.position = position;
+  public translate(delta: Vector3): void {
+    this._position.x += delta.x;
+    this._position.y += delta.y;
+    this._position.z += delta.z;
+    this._isDirty = true;
+  }
+
+  /**
+   * Rotates the object by adding the given delta angles to its current rotation.
+   * @param delta - The amount to rotate (in radians) along the X, Y, and Z axes.
+   */
+  public rotate(delta: Vector3): void {
+    this._rotation.x += delta.x;
+    this._rotation.y += delta.y;
+    this._rotation.z += delta.z;
+    this._isDirty = true;
   }
 }

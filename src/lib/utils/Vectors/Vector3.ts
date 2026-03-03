@@ -17,36 +17,15 @@ export default class Vector3 {
     return new Vector3(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
   }
 
-  translate(t: Vector3) {
-    this.x += t.x;
-    this.y += t.y;
-    this.z += t.z;
-  }
+  static isEqual(v1: Vector3, v2: Vector3): boolean {
+    const x1 = v1.x;
+    const y1 = v1.y;
+    const z1 = v1.z;
 
-  rotateY(angle: number) {
-    const c = Math.cos(angle);
-    const s = Math.sin(angle);
-    const tempX = this.x;
+    const x2 = v2.x;
+    const y2 = v2.y;
+    const z2 = v2.z;
 
-    this.x = tempX * c - this.z * s;
-    this.z = tempX * s + this.z * c;
-  }
-
-  rotateX(angle: number) {
-    const c = Math.cos(angle);
-    const s = Math.sin(angle);
-    const tempY = this.y;
-
-    this.y = tempY * c - this.z * s;
-    this.z = tempY * s + this.z * c;
-  }
-
-  rotateZ(angle: number) {
-    const c = Math.cos(angle);
-    const s = Math.sin(angle);
-    const tempX = this.x;
-
-    this.x = tempX * c - this.y * s;
-    this.y = tempX * s + this.y * c;
+    return x1 === x2 && y1 == y2 && z1 == z2;
   }
 }
