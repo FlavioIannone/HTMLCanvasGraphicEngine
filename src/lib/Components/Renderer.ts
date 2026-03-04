@@ -6,6 +6,7 @@ import Screen from "../utils/CoordinatesManagers/Screen.js";
 import { Matrix4 } from "../utils/Matrices/Matrix4.js";
 import { ProjectedVertex } from "../utils/Types.js";
 import Vector2 from "../utils/Vectors/Vector2.js";
+import Vector3 from "../utils/Vectors/Vector3.js";
 import Vector4 from "../utils/Vectors/Vector4.js";
 
 /**
@@ -17,6 +18,7 @@ type RenderableTriangle = {
   p2: Vector2;
   p3: Vector2;
   avgDepth: number;
+  color: string;
 };
 
 /**
@@ -28,8 +30,9 @@ export default class Renderer {
   private gameObject: GameObject;
   public mesh: Mesh;
 
-  // Scratchpad vector used for the projection pipeline to avoid memory leaks.
-  private _workVec: Vector4 = new Vector4(0, 0, 0, 1);
+  // Scratchpad vectors used for the projection pipeline to avoid memory leaks.
+  private _workVec4: Vector4 = new Vector4(0, 0, 0, 1);
+  private _workVec3: Vector3 = new Vector3(0, 0, 0);
 
   // Object Pool: Pre-allocated array of triangles for the rendering pipeline.
   private _trianglesToDraw: RenderableTriangle[] = [];
@@ -51,6 +54,7 @@ export default class Renderer {
         p2: new Vector2(),
         p3: new Vector2(),
         avgDepth: 0,
+        color: `rgb(0,0,0)`,
       });
     }
   }
@@ -76,17 +80,24 @@ export default class Renderer {
       const localVertex = this.mesh.vertexes[i];
 
       // 1. Load the raw local 3D vertex into our scratchpad
-      this._workVec.x = localVertex.x;
-      this._workVec.y = localVertex.y;
-      this._workVec.z = localVertex.z;
-      this._workVec.w = 1;
+      this._workVec4.x = localVertex.x;
+      this._workVec4.y = localVertex.y;
+      this._workVec4.z = localVertex.z;
+      this._workVec4.w = 1;
 
       // 2. Apply all spatial transformations in one single matrix multiplication
-      Matrix4.matrix4MultiplyVector4(this._workVec, modelMatrix, this._workVec);
+      Matrix4.matrix4MultiplyVector4(
+        this._workVec4,
+        modelMatrix,
+        this._workVec4,
+      );
+      this._workVec3.x = this._workVec4.x;
+      this._workVec3.y = this._workVec4.y;
+      this._workVec3.z = this._workVec4.z;
 
       // 3. Project to Normalized Device Coordinates (NDC) and save Z for depth sorting
-      Screen.project(this._workVec, this.mesh.projectedVertexes[i].position);
-      this.mesh.projectedVertexes[i].depth = this._workVec.z;
+      Screen.project(this._workVec3, this.mesh.projectedVertexes[i].position);
+      this.mesh.projectedVertexes[i].depth = this._workVec4.z;
 
       // 4. Map NDC to actual Canvas pixel coordinates
       Screen.toScreen(this.mesh.projectedVertexes[i].position);
@@ -107,11 +118,11 @@ export default class Renderer {
   ): RenderableTriangle[] {
     // Iterate over the mesh faces and mutate the pre-allocated objects
     for (let i = 0; i < this.mesh.triangles.length; i++) {
-      const triIndices = this.mesh.triangles[i];
+      const tri = this.mesh.triangles[i];
 
-      const v1 = projectedVertexes[triIndices[0]];
-      const v2 = projectedVertexes[triIndices[1]];
-      const v3 = projectedVertexes[triIndices[2]];
+      const v1 = projectedVertexes[tri.vertexes[0]];
+      const v2 = projectedVertexes[tri.vertexes[1]];
+      const v3 = projectedVertexes[tri.vertexes[2]];
 
       // Grab the pooled object instead of creating a new one
       const pooledTriangle = this._trianglesToDraw[i];
@@ -123,6 +134,7 @@ export default class Renderer {
 
       // Calculate and assign the average Z-depth
       pooledTriangle.avgDepth = (v1.depth + v2.depth + v3.depth) / 3;
+      pooledTriangle.color = `rgb(${tri.color[0]}, ${tri.color[1]},${tri.color[2]})`;
     }
 
     // Sort descending: highest Z (furthest away) gets drawn first
@@ -145,11 +157,11 @@ export default class Renderer {
       Engine.context.closePath();
 
       // Fill the triangle with the configured solid color
-      Engine.context.fillStyle = config.foregroundColor;
+      Engine.context.fillStyle = tri.color;
       Engine.context.fill();
 
       // Draw wireframe borders to distinguish faces of the same color
-      Engine.context.strokeStyle = "#000000";
+      Engine.context.strokeStyle = tri.color;
       Engine.context.lineWidth = 1;
       Engine.context.stroke();
     }

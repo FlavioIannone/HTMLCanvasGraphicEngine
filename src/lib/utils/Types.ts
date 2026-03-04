@@ -7,7 +7,9 @@ export type Vertexes = {
 
 export type Edge = { vx1: number; vx2: number };
 
-export type Triangle = [number, number, number];
+export type Triangle = { vertexes: [number, number, number]; color: Color };
+
+export type Color = [number, number, number];
 
 export type ScreenConfig = {
   width: number;

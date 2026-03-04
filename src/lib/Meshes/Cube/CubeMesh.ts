@@ -33,23 +33,23 @@ export default class CubeMesh implements Mesh {
     }
 
     this.triangles = [
-      [0, 1, 2],
-      [0, 2, 3],
+      { vertexes: [0, 1, 2], color: [255, 0, 0] },
+      { vertexes: [0, 2, 3], color: [255, 0, 0] },
 
-      [5, 4, 7],
-      [5, 7, 6],
+      { vertexes: [5, 4, 7], color: [0, 255, 0] },
+      { vertexes: [5, 7, 6], color: [0, 255, 0] },
 
-      [4, 5, 1],
-      [4, 1, 0],
+      { vertexes: [4, 5, 1], color: [0, 0, 255] },
+      { vertexes: [4, 1, 0], color: [0, 0, 255] },
 
-      [3, 2, 6],
-      [3, 6, 7],
+      { vertexes: [3, 2, 6], color: [255, 255, 0] },
+      { vertexes: [3, 6, 7], color: [255, 255, 0] },
 
-      [1, 5, 6],
-      [1, 6, 2],
+      { vertexes: [1, 5, 6], color: [0, 255, 255] },
+      { vertexes: [1, 6, 2], color: [0, 255, 255] },
 
-      [4, 0, 3],
-      [4, 3, 7],
+      { vertexes: [4, 0, 3], color: [255, 0, 255] },
+      { vertexes: [4, 3, 7], color: [255, 0, 255] },
     ];
   }
 }
