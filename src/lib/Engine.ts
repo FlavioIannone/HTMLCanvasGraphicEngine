@@ -1,5 +1,6 @@
 import config from "../game.config.js";
 import Screen from "./utils/CoordinatesManagers/Screen.js";
+import { InputManager } from "./utils/InputManager/InputManager.js";
 import Time from "./utils/Time.js";
 
 /**
@@ -80,6 +81,8 @@ export default class Engine {
     Engine.instantiate();
     Time.instantiate();
     Screen.instantiate();
+    InputManager.instantiate();
+    InputManager.init();
   }
 
   /**
