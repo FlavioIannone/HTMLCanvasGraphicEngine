@@ -6,42 +6,46 @@ import Time from "./utils/Time.js";
 /**
  * Core Engine class responsible for managing the rendering context,
  * canvas lifecycle, and main update loop variables.
- * Implements a Singleton pattern to ensure only one engine instance exists.
+ * Implements a strict Singleton pattern to act as the central nervous system
+ * of the application.
  */
 export default class Engine {
-  // References to the HTML canvas and its 2D rendering context
-  private static _canvas: HTMLCanvasElement | null;
-  private static _context: CanvasRenderingContext2D | null;
+  // References to the HTML canvas and its 2D rendering context.
+  private static _canvas: HTMLCanvasElement | null = null;
+  private static _context: CanvasRenderingContext2D | null = null;
 
-  // Dirty flag pattern: ensures expensive resize operations (matrix math and buffer reallocation)
-  // are performed at most once per frame, regardless of how many resize events fire.
+  // --- OPTIMIZATION: DEFERRED RESIZE (DIRTY FLAG) ---
+  // Window resize events can fire dozens of times per second. Recalculating
+  // projection matrices and DOM layouts synchronously causes severe frame drops.
+  // This flag defers the heavy computation to the next safe Update cycle.
   private static _needsResize: boolean = true;
-  // The single instance of the Engine
+
+  // The single authorized instance of the Engine.
   private static _instance: Engine | null = null;
 
   /**
    * Gets the 2D rendering context.
-   * @throws Error if the context hasn't been initialized.
+   * @throws {Error} If accessed before Engine initialization.
    */
-  public static get context() {
+  public static get context(): CanvasRenderingContext2D {
     if (!Engine._context) throw Error("Canvas context not found");
     return Engine._context;
   }
 
   /**
    * Gets the HTML canvas element.
-   * @throws Error if the canvas hasn't been initialized.
+   * @throws {Error} If accessed before Engine initialization.
    */
-  public static get canvas() {
+  public static get canvas(): HTMLCanvasElement {
     if (!Engine._canvas) throw Error("Canvas element not found");
     return Engine._canvas;
   }
 
   /**
    * Gets the Singleton instance of the Engine.
-   * @throws Error if the engine hasn't been instantiated yet.
+   * @throws {Error} If the engine hasn't been instantiated yet.
    */
-  public static get instance() {
+  public static get instance(): Engine {
     if (!Engine._instance) throw Error("Engine not initialized");
     return Engine._instance;
   }
@@ -57,27 +61,31 @@ export default class Engine {
         "canvas",
       ) as HTMLCanvasElement | null;
 
-      if (!Engine._canvas) throw Error("Canvas element not found");
+      if (!Engine._canvas) throw Error("Canvas element not found in DOM.");
 
       Engine._context = Engine._canvas.getContext("2d");
 
-      if (!Engine._context) throw new Error("Canvas context not found");
+      if (!Engine._context) throw new Error("2D Canvas context not supported.");
     }
     return Engine._instance;
   }
 
   /**
-   * Initializes the Engine Singleton.
-   * Must be called before accessing the instance or context.
+   * Phase 1 of the Lifecycle: Instantiates the Engine Singleton.
+   * Must be called before accessing any systems.
    */
-  public static instantiate() {
-    Engine._instance = new Engine();
+  public static instantiate(): void {
+    if (!Engine._instance) {
+      new Engine();
+    }
   }
 
   /**
-   * Called once before the first frame is rendered
+   * Phase 2 of the Lifecycle: Awake.
+   * Called once before the first frame is rendered to allocate memory
+   * and initialize core foundational subsystems.
    */
-  public static awake() {
+  public static awake(): void {
     Engine.instantiate();
     Time.instantiate();
     Screen.instantiate();
@@ -86,31 +94,39 @@ export default class Engine {
   }
 
   /**
-   * Called only in the first frame
+   * Phase 3 of the Lifecycle: Start.
+   * Called exactly once before the update loop begins.
+   * Safe to bind DOM events here as all core systems are guaranteed to be alive.
    */
-  public static start() {
-    if (!Engine.instance) {
-      console.error("Error, Time not instantiated.");
-      return;
-    }
-    if (!Screen.instance) {
-      console.error("Error, Time not instantiated.");
-      return;
-    }
-    if (!Time.instance) {
-      console.error("Error, Time not instantiated.");
-      return;
-    }
+  public static start(): void {
+    // If any of these getters fail, they will intentionally throw an Error
+    // and halt the execution, preventing undefined behavior down the line.
+    const ensureTime = Time.instance;
+    const ensureScreen = Screen.instance;
+
+    window.addEventListener("resize", Engine.onWindowResize);
+
+    // Note: Requesting pointer lock usually requires user interaction (e.g., click)
+    // rather than just a 'focus' event to bypass browser security policies.
+    window.addEventListener("focus", () => {
+      if (Engine._canvas) InputManager.requestPointerLock();
+    });
   }
 
   /**
-   * Called once per frame inside the main game loop.
-   * Calls the update methods of the utils singletons.
-   * Checks for the dirty flag and processes delayed resizes.
+   * Phase 4 of the Lifecycle: Update.
+   * Called once per frame inside the main game loop (requestAnimationFrame).
+   * Orchestrates the clearing of the screen, time delta calculation, and deferred resizing.
+   * @param time The high-resolution timestamp provided by the browser.
    */
-  public static update(time: number) {
+  public static update(time: number): void {
+    // 1. Wipe the previous frame's artifacts
     Screen.clear();
+
+    // 2. Calculate delta time for frame-rate independent physics/movement
     Time.update(time);
+
+    // 3. Process deferred layout recalulations securely outside the event listener
     if (Engine._needsResize) {
       Engine.setCanvas();
       Engine._needsResize = false;
@@ -119,27 +135,27 @@ export default class Engine {
 
   /**
    * Event listener callback for the window 'resize' event.
-   * It only raises the dirty flag, deferring the heavy computations to the update loop.
-   * @param e The UI Event passed by the event listener.
+   * strictly sets a flag to avoid jank/stuttering during active window drag.
    */
-  public static onWindowResize(e: UIEvent) {
+  public static onWindowResize = (e: UIEvent): void => {
     Engine._needsResize = true;
-  }
+  };
 
   /**
-   * Recomputes the canvas dimensions to match the window, applying devicePixelRatio
-   * for high-DPI (Retina) displays, and updates the projection matrix.
+   * Recomputes the canvas internal resolution to match the physical window size.
+   * Applies devicePixelRatio to ensure crisp rendering on High-DPI (Retina) displays.
    */
-  public static setCanvas() {
-    // Calculate the high-resolution internal buffer size based on pixel ratio
+  public static setCanvas(): void {
+    // Calculate the high-resolution internal buffer size
     config.screenConfig.width = window.innerWidth * window.devicePixelRatio;
     config.screenConfig.height = window.innerHeight * window.devicePixelRatio;
 
-    // Set the internal resolution of the canvas (the actual pixel grid)
+    // Apply the resolution directly to the physical canvas grid
     Engine.canvas.width = config.screenConfig.width;
     Engine.canvas.height = config.screenConfig.height;
 
-    // Update the mathematical projection matrix with the new aspect ratio
+    // Force the projection matrix to rebuild with the new aspect ratio
+    // This prevents the 3D world from stretching or squashing.
     Screen.updateProjectionMatrix();
   }
 }

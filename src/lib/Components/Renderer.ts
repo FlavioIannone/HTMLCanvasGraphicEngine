@@ -1,4 +1,5 @@
 import GameObject from "../../GameObjects/GameObject.js";
+import Camera from "../Camera/Camera.js";
 import Engine from "../Engine.js";
 import Mesh from "../Meshes/Mesh.js";
 import Screen from "../utils/CoordinatesManagers/Screen.js";
@@ -21,35 +22,41 @@ type RenderableTriangle = {
 };
 
 /**
- * Handles the rendering pipeline for a specific GameObject.
- * Transforms local mesh vertices into world space, projects them to screen space,
- * culls hidden faces, and rasterizes using an Object Pool for zero memory allocation.
+ * Core Graphics Pipeline.
+ * Transforms 3D local coordinates into 2D screen pixels.
+ * Strictly utilizes Object Pooling to guarantee Zero-Allocation during the hot path (update loop),
+ * preventing Garbage Collection stutters.
  */
 export default class Renderer {
   private gameObject: GameObject;
   public mesh: Mesh;
 
-  // Scratchpad vectors used for the projection pipeline to avoid memory leaks.
+  // --- MEMORY SCRATCHPADS ---
+  // Reused across all vertices to prevent 'new VectorX()' calls in the loop.
   private _workVec4: Vector4 = new Vector4(0, 0, 0, 1);
   private _workVec3: Vector3 = new Vector3(0, 0, 0);
 
-  // Object Pool: Pre-allocated array of triangles.
+  // --- OBJECT POOL ---
+  // A pre-allocated chunk of memory holding the maximum possible triangles.
+  // We mutate these objects in-place rather than creating/destroying them.
   private _trianglesToDraw: RenderableTriangle[] = [];
 
-  // Tracks how many pooled triangles are actually visible in the current frame.
+  // Tracks how many pooled triangles are actually visible in the current frame
+  // after Back-Face Culling.
   private _activeTriangleCount: number = 0;
 
+  // The active camera determining the View Space.
+  private _activeCamera: Camera;
+
   /**
-   * Initializes the Renderer for a specific GameObject and its Mesh.
-   * Pre-allocates memory for the maximum possible triangles.
-   * @param gameObject The owner of this renderer.
-   * @param mesh The 3D geometry to draw.
+   * Initializes the Renderer and pre-allocates the exact memory needed for the Mesh.
    */
   constructor(gameObject: GameObject, mesh: Mesh) {
     this.gameObject = gameObject;
     this.mesh = mesh;
+    this._activeCamera = Camera.main;
 
-    // PRE-ALLOCATION: Create the exact number of objects needed once.
+    // PRE-ALLOCATION: Fill the pool once at instantiation.
     for (let i = 0; i < this.mesh.triangles.length; i++) {
       this._trianglesToDraw.push({
         p1: new Vector2(),
@@ -63,6 +70,7 @@ export default class Renderer {
 
   /**
    * Main rendering loop execution. Called every frame.
+   * Follows the strict order: Vertex Transform -> Face Processing -> Rasterization.
    */
   update() {
     const projectedVertexes = this.getLocalVertexes();
@@ -71,37 +79,56 @@ export default class Renderer {
   }
 
   /**
-   * Transforms and projects the mesh's local 3D vertices into 2D screen coordinates.
-   * @returns An array of projected vertices containing screen positions and Z-depth.
+   * Translates local mesh vertices through the spatial pipeline:
+   * Local Space -> World Space -> Camera Space -> Screen Space.
+   * @returns An array of projected 2D vertices containing Z-depth relative to the camera.
    */
   private getLocalVertexes(): ProjectedVertex[] {
     const t = this.gameObject.transform;
     const modelMatrix = t.getModelMatrix();
 
+    // Extracted ONCE per object to save CPU cycles.
+    const viewMatrix = this._activeCamera.getLookAtMatrix();
+
     for (let i = 0; i < this.mesh.vertexes.length; i++) {
       const localVertex = this.mesh.vertexes[i];
 
-      // 1. Load the raw local 3D vertex into our scratchpad
+      // 1. Load raw data into the scratchpad
       this._workVec4.x = localVertex.x;
       this._workVec4.y = localVertex.y;
       this._workVec4.z = localVertex.z;
       this._workVec4.w = 1;
 
-      // 2. Apply all spatial transformations in one single matrix multiplication
+      // 2. LOCAL TO WORLD SPACE
+      // Places the object into the absolute universe.
       Matrix4.matrix4MultiplyVector4(
         this._workVec4,
         modelMatrix,
         this._workVec4,
       );
+
+      // 3. WORLD TO CAMERA SPACE
+      // Shifts the universe relative to the camera's eyes.
+      // Matrix multiplication order is non-commutative: Model MUST precede View.
+      Matrix4.matrix4MultiplyVector4(
+        this._workVec4,
+        viewMatrix,
+        this._workVec4,
+      );
+
       this._workVec3.x = this._workVec4.x;
       this._workVec3.y = this._workVec4.y;
       this._workVec3.z = this._workVec4.z;
 
-      // 3. Project to Normalized Device Coordinates (NDC) and save Z for depth sorting
+      // 4. PERSPECTIVE PROJECTION
       Screen.project(this._workVec3, this.mesh.projectedVertexes[i].position);
+
+      // CRITICAL DEPTH CAPTURE:
+      // Save the Z value AFTER View Matrix, but BEFORE it gets warped by projection.
+      // This ensures depth sorting is based on physical distance from the camera lens.
       this.mesh.projectedVertexes[i].depth = this._workVec4.z;
 
-      // 4. Map NDC to actual Canvas pixel coordinates
+      // 5. NORMALIZED TO PIXELS
       Screen.toScreen(this.mesh.projectedVertexes[i].position);
     }
 
@@ -109,12 +136,11 @@ export default class Renderer {
   }
 
   /**
-   * Assembles projected vertices, performs Back-face Culling, computes depth,
+   * Assembles projected vertices, culls hidden faces, computes depth,
    * and sorts the active pool using the Painter's Algorithm.
-   * @param projectedVertexes Fully transformed screen-space vertices.
    */
   private processTriangles(projectedVertexes: ProjectedVertex[]): void {
-    this._activeTriangleCount = 0; // Reset active counter for this frame
+    this._activeTriangleCount = 0;
 
     for (let i = 0; i < this.mesh.triangles.length; i++) {
       const tri = this.mesh.triangles[i];
@@ -125,32 +151,30 @@ export default class Renderer {
 
       // --- BACK-FACE CULLING (2D Cross Product Optimization) ---
       // Calculates the Z-component of the normal vector in screen space.
+      // If the vertices wind clockwise (Z > 0), the face points away from the camera.
+      // Skipping rendering for these saves ~50% of rasterization cost.
       const normalZ =
         (v2.position.x - v1.position.x) * (v3.position.y - v1.position.y) -
         (v2.position.y - v1.position.y) * (v3.position.x - v1.position.x);
 
-      if (normalZ > 0) {
-        continue; // Face is pointing away. Skip it completely.
-      }
+      if (normalZ > 0) continue;
 
-      // Grab the NEXT AVAILABLE pooled object
+      // Retrieve the next available pooled object by reference
       const pooledTriangle = this._trianglesToDraw[this._activeTriangleCount];
 
-      // Mutate its properties via reference assignment
+      // Mutate properties directly. No new objects are created.
       pooledTriangle.p1 = v1.position;
       pooledTriangle.p2 = v2.position;
       pooledTriangle.p3 = v3.position;
-
-      // Calculate and assign the average Z-depth
       pooledTriangle.avgDepth = (v1.depth + v2.depth + v3.depth) / 3;
       pooledTriangle.color = `rgb(${tri.color[0]}, ${tri.color[1]},${tri.color[2]})`;
 
-      this._activeTriangleCount++; // Increment active objects
+      this._activeTriangleCount++;
     }
 
-    // --- ZERO-ALLOCATION SORTING ---
-    // Push all inactive/culled triangles to the absolute bottom of the sort list
-    // to prevent garbage data from shifting into the active render range.
+    // --- PAINTER'S ALGORITHM SAFEGUARD ---
+    // Push all inactive/culled triangles to negative infinity depth.
+    // This prevents garbage data left in the pool from overriding active triangles during sorting.
     for (
       let j = this._activeTriangleCount;
       j < this._trianglesToDraw.length;
@@ -159,15 +183,15 @@ export default class Renderer {
       this._trianglesToDraw[j].avgDepth = -Infinity;
     }
 
-    // Sort descending: highest Z (furthest away) gets drawn first
+    // Sort descending: highest Z (furthest away) gets drawn first, naturally overdrawn by closer elements.
     this._trianglesToDraw.sort((a, b) => b.avgDepth - a.avgDepth);
   }
 
   /**
-   * Rasterizes ONLY the active, sorted triangles onto the HTML Canvas.
+   * Rasterizes ONLY the active, sorted triangles onto the HTML Canvas context.
    */
   private render(): void {
-    // CRITICAL: We only loop up to _activeTriangleCount, ignoring culled faces
+    // Loop only up to _activeTriangleCount, entirely ignoring culled pool elements.
     for (let i = 0; i < this._activeTriangleCount; i++) {
       const tri = this._trianglesToDraw[i];
 
@@ -180,9 +204,14 @@ export default class Renderer {
       Engine.context.fillStyle = tri.color;
       Engine.context.fill();
 
+      // Stroke prevents micro-gaps (seams) between adjacent triangles due to canvas anti-aliasing
       Engine.context.strokeStyle = tri.color;
       Engine.context.lineWidth = 1;
       Engine.context.stroke();
     }
+  }
+
+  public setNewActiveCamera(newCamera: Camera): void {
+    this._activeCamera = newCamera;
   }
 }

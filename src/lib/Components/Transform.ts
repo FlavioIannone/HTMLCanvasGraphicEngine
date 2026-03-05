@@ -16,6 +16,11 @@ export default class Transform {
   /** The scale/dimensions of the object relative to its local origin. */
   private _scale: Vector3;
 
+  // Cached directional vectors (Zero-Allocation)
+  private _forward: Vector3 = new Vector3(0, 0, 1);
+  private _right: Vector3 = new Vector3(1, 0, 0);
+  private _up: Vector3 = new Vector3(0, 1, 0);
+
   // Internal matrices used to compose the final rotation
   private _mX: Matrix4 = new Matrix4();
   private _mY: Matrix4 = new Matrix4();
@@ -73,7 +78,46 @@ export default class Transform {
 
   /** Gets the current scale vector. Treat as read-only. */
   public get scale_clone(): Vector3 {
-    return new Vector3(this._scale.x, this.position.y, this.position.z);
+    return new Vector3(this._scale.x, this._scale.y, this._scale.z);
+  }
+
+  /** * The normalized directional vector pointing "Forward" relative to the object's rotation.
+   * Essential for Camera LookAt math and character movement.
+   */
+  public get forward(): Readonly<Vector3> {
+    const cy = Math.cos(this._rotation.y); // Yaw
+    const sy = Math.sin(this._rotation.y);
+    const cx = Math.cos(this._rotation.x); // Pitch
+    const sx = Math.sin(this._rotation.x);
+
+    this._forward.x = sy * cx;
+    this._forward.y = -sx;
+    this._forward.z = cy * cx;
+
+    // Safety normalization to prevent floating point drift
+    this._forward.normalize();
+    return this._forward;
+  }
+
+  /** The normalized directional vector pointing "Right". */
+  public get right(): Readonly<Vector3> {
+    const cy = Math.cos(this._rotation.y);
+    const sy = Math.sin(this._rotation.y);
+
+    // Right vector ignores Pitch (X) for FPS camera stability
+    this._right.x = cy;
+    this._right.y = 0;
+    this._right.z = -sy;
+
+    this._right.normalize();
+    return this._right;
+  }
+
+  /** The normalized directional vector pointing "Up". */
+  public get up(): Readonly<Vector3> {
+    // Cross product of Right and Forward guarantees a perfectly orthogonal Up vector
+    Vector3.crossProduct(this.right, this.forward, this._up);
+    return this._up;
   }
 
   // --- SETTERS ---

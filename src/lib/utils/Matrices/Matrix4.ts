@@ -1,31 +1,35 @@
+import Transform from "../../Components/Transform.js";
 import Vector3 from "../Vectors/Vector3.js";
 import Vector4 from "../Vectors/Vector4.js";
 
 /**
- * Represents a 4x4 Matrix using a flat Float32Array for maximum performance.
- * Employs row-major ordering and strictly uses pre-allocated memory to avoid Garbage Collection.
+ * Represents a 4x4 Matrix built specifically for High-Performance CPU rendering.
+ * * ARCHITECTURAL DECISIONS:
+ * 1. Float32Array: Ensures contiguous memory blocks for cache-friendly SIMD optimization.
+ * 2. Row-Major Layout: Vectors are treated as column vectors multiplied on the right (M * v).
+ * Translations are explicitly stored in the last column (indices 3, 7, 11).
+ * 3. Zero-Allocation: Relies entirely on mutating pre-existing arrays.
  */
 export class Matrix4 {
   public entries: Float32Array;
 
+  // Static scratchpads dedicated exclusively to LookAt matrix axis generation.
+  // Prevents instantiating 3 new vectors every time the camera moves.
+  private static X: Vector3 = new Vector3();
+  private static Y: Vector3 = new Vector3();
+  private static Z: Vector3 = new Vector3();
+
   constructor() {
-    // Initializes as an Identity Matrix
+    // Initializes as an Identity Matrix (neutral transformation state)
     this.entries = new Float32Array([
       1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
     ]);
   }
 
-  /**
-   * Returns a new matrix initialized as an Identity Matrix
-   */
   public static get identity() {
     return new Matrix4();
   }
 
-  /**
-   * Resets the given matrix back to an Identity Matrix.
-   * @param out The matrix to reset.
-   */
   public static resetToIdentity(out: Matrix4) {
     out.entries.fill(0);
     out.entries[0] = 1;
@@ -35,10 +39,9 @@ export class Matrix4 {
   }
 
   /**
-   * Multiplies a 4D vector by a 4x4 matrix (M * v).
-   * @param v The input vector.
-   * @param m The transformation matrix.
-   * @param out The vector where the result will be stored (can be the same as 'v').
+   * Multiplies a 4x4 matrix by a 4D vector (M * v).
+   * Includes Anti-Aliasing protection: local constants cache the input vector
+   * so 'out' can safely reference the exact same object in memory as 'v'.
    */
   public static matrix4MultiplyVector4(
     v: Vector4,
@@ -47,12 +50,13 @@ export class Matrix4 {
   ): void {
     const mat = m.entries;
 
-    // Cache vector values to prevent aliasing if 'v' and 'out' are the same object
-    const vx = v.x;
-    const vy = v.y;
-    const vz = v.z;
-    const vw = v.w;
+    // Cache to prevent data corruption during in-place mutation
+    const vx = v.x,
+      vy = v.y,
+      vz = v.z,
+      vw = v.w;
 
+    // Row-Major multiplication logic
     out.x = vx * mat[0] + vy * mat[1] + vz * mat[2] + vw * mat[3];
     out.y = vx * mat[4] + vy * mat[5] + vz * mat[6] + vw * mat[7];
     out.z = vx * mat[8] + vy * mat[9] + vz * mat[10] + vw * mat[11];
@@ -61,8 +65,8 @@ export class Matrix4 {
 
   /**
    * Multiplies two 4x4 matrices (A * B).
-   * Fully unrolled for CPU performance. Uses local caching to safely allow 'out'
-   * to be the same instance as 'a' or 'b' without memory corruption (aliasing).
+   * Fully unrolled into explicit variables. Avoiding nested 'for' loops entirely
+   * skips branch prediction overhead and allows maximum compiler optimization.
    */
   public static multiplyMatrix4(a: Matrix4, b: Matrix4, out: Matrix4): void {
     const aMat = a.entries;
@@ -108,22 +112,21 @@ export class Matrix4 {
     //#endregion
 
     //#region Multiply A x B
-    // First row
     outMat[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
     outMat[1] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
     outMat[2] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
     outMat[3] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
-    // Second row
+
     outMat[4] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
     outMat[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
     outMat[6] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
     outMat[7] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
-    // Third row
+
     outMat[8] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
     outMat[9] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
     outMat[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
     outMat[11] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
-    // Fourth row
+
     outMat[12] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
     outMat[13] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
     outMat[14] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
@@ -131,92 +134,51 @@ export class Matrix4 {
     //#endregion
   }
 
-  /**
-   * Generates a rotation matrix around the X axis (Pitch).
-   * Overwrites all 16 indices.
-   */
+  // --- TRANSFORMATION GENERATORS ---
+  // The following methods overwrite the target matrix in-place.
+
   public static makeXRotationMatrix4(angle: number, out: Matrix4) {
     const c = Math.cos(angle);
     const s = Math.sin(angle);
-
     const m = out.entries;
+    m.fill(0);
     m[0] = 1;
-    m[1] = 0;
-    m[2] = 0;
-    m[3] = 0;
-    m[4] = 0;
     m[5] = c;
     m[6] = -s;
-    m[7] = 0;
-    m[8] = 0;
     m[9] = s;
     m[10] = c;
-    m[11] = 0;
-    m[12] = 0;
-    m[13] = 0;
-    m[14] = 0;
     m[15] = 1;
   }
 
-  /**
-   * Generates a rotation matrix around the Y axis (Yaw).
-   * Overwrites all 16 indices.
-   */
   public static makeYRotationMatrix4(angle: number, out: Matrix4) {
     const c = Math.cos(angle);
     const s = Math.sin(angle);
-
     const m = out.entries;
+    m.fill(0);
     m[0] = c;
-    m[1] = 0;
     m[2] = s;
-    m[3] = 0;
-    // CRITICAL FIX: m[5] must be 1 to preserve the Y axis scale during rotation.
-    m[4] = 0;
     m[5] = 1;
-    m[6] = 0;
-    m[7] = 0;
     m[8] = -s;
-    m[9] = 0;
     m[10] = c;
-    m[11] = 0;
-    m[12] = 0;
-    m[13] = 0;
-    m[14] = 0;
     m[15] = 1;
   }
 
-  /**
-   * Generates a rotation matrix around the Z axis (Roll).
-   * Overwrites all 16 indices.
-   */
   public static makeZRotationMatrix4(angle: number, out: Matrix4) {
     const c = Math.cos(angle);
     const s = Math.sin(angle);
-
     const m = out.entries;
+    m.fill(0);
     m[0] = c;
     m[1] = -s;
-    m[2] = 0;
-    m[3] = 0;
     m[4] = s;
     m[5] = c;
-    m[6] = 0;
-    m[7] = 0;
-    m[8] = 0;
-    m[9] = 0;
     m[10] = 1;
-    m[11] = 0;
-    m[12] = 0;
-    m[13] = 0;
-    m[14] = 0;
     m[15] = 1;
   }
 
   /**
-   * Combines individual Euler angle rotations into a single rotation matrix.
-   * Multiplication order is M = Mx * My * Mz.
-   * When applied to a vector (M * v), the rotation application order is Z, then Y, then X.
+   * Generates a combined Euler rotation matrix.
+   * Multiplies locally in the specific order: Z -> Y -> X to avoid Gimbal Lock.
    */
   public static makeXYZRotationMatrix4(
     v: Vector3,
@@ -228,64 +190,74 @@ export class Matrix4 {
     this.makeXRotationMatrix4(v.x, mX);
     this.makeYRotationMatrix4(v.y, mY);
     this.makeZRotationMatrix4(v.z, mZ);
-
     this.multiplyMatrix4(mX, mY, out); // out = X * Y
     this.multiplyMatrix4(out, mZ, out); // out = (X * Y) * Z
   }
 
-  /**
-   * Generates a translation matrix.
-   * Overwrites all 16 indices.
-   */
   public static makeTranslationMatrix4(v: Vector3, out: Matrix4) {
-    const x = v.x;
-    const y = v.y;
-    const z = v.z;
     const m = out.entries;
-
+    m.fill(0);
     m[0] = 1;
-    m[1] = 0;
-    m[2] = 0;
-    m[3] = x;
-    m[4] = 0;
     m[5] = 1;
-    m[6] = 0;
-    m[7] = y;
-    m[8] = 0;
-    m[9] = 0;
     m[10] = 1;
-    m[11] = z;
-    m[12] = 0;
-    m[13] = 0;
-    m[14] = 0;
+    m[15] = 1;
+    m[3] = v.x;
+    m[7] = v.y;
+    m[11] = v.z; // Row-major translation column
+  }
+
+  public static makeScaleMatrix4(v: Vector3, out: Matrix4) {
+    const m = out.entries;
+    m.fill(0);
+    m[0] = v.x;
+    m[5] = v.y;
+    m[10] = v.z;
     m[15] = 1;
   }
 
   /**
-   * Generates a scaling matrix.
-   * Overwrites all 16 indices.
+   * Generates the View Matrix (LookAt) for a Left-Handed Coordinate System.
+   * Creates an orthogonal basis (X, Y, Z axes) from a viewpoint and target,
+   * then applies the inverted translation to shift the world into camera space.
    */
-  public static makeScaleMatrix4(v: Vector3, out: Matrix4) {
-    const x = v.x;
-    const y = v.y;
-    const z = v.z;
-    const m = out.entries;
+  public static makeLookAtMatrix4(eye: Vector3, at: Vector3, out: Matrix4) {
+    // 1. Z-Axis (Forward): Points FROM eye TO target (Left-Handed System)
+    Vector3.subtract(at, eye, Matrix4.Z);
+    Matrix4.Z.normalize();
 
-    m[0] = x;
-    m[1] = 0;
-    m[2] = 0;
-    m[3] = 0;
-    m[4] = 0;
-    m[5] = y;
-    m[6] = 0;
-    m[7] = 0;
-    m[8] = 0;
-    m[9] = 0;
-    m[10] = z;
-    m[11] = 0;
-    m[12] = 0;
-    m[13] = 0;
-    m[14] = 0;
-    m[15] = 1;
+    // 2. X-Axis (Right): Perpendicular to Global Up and Local Forward
+    Vector3.crossProduct(Vector3.up, Matrix4.Z, Matrix4.X);
+    Matrix4.X.normalize();
+
+    // 3. Y-Axis (True Up): Perpendicular to Forward and Right
+    Vector3.crossProduct(Matrix4.Z, Matrix4.X, Matrix4.Y);
+    Matrix4.Y.normalize();
+
+    // 4. Inverse Translation: Projecting the negative eye position onto the new axes
+    const t_x = -Vector3.dotProduct(Matrix4.X, eye);
+    const t_y = -Vector3.dotProduct(Matrix4.Y, eye);
+    const t_z = -Vector3.dotProduct(Matrix4.Z, eye);
+
+    // 5. Build Row-Major Matrix:
+    // Axes form the upper 3x3 rotation subset.
+    // Translation dictates the right-most 4th column (indices 3, 7, 11).
+    out.entries.set([
+      this.X.x,
+      this.X.y,
+      this.X.z,
+      t_x,
+      this.Y.x,
+      this.Y.y,
+      this.Y.z,
+      t_y,
+      this.Z.x,
+      this.Z.y,
+      this.Z.z,
+      t_z,
+      0,
+      0,
+      0,
+      1,
+    ]);
   }
 }

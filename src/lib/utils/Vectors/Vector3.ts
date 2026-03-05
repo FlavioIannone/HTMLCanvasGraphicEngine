@@ -94,6 +94,13 @@ export default class Vector3 {
   }
 
   /**
+   * Computes the Dot Product of two vectors.
+   */
+  public static dotProduct(a: Readonly<Vector3>, b: Readonly<Vector3>): number {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+  }
+
+  /**
    * Checks if two vectors are mathematically identical.
    */
   public static isEqual(v1: Readonly<Vector3>, v2: Readonly<Vector3>): boolean {

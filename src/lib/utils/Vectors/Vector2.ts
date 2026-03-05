@@ -34,6 +34,14 @@ export default class Vector2 {
       this.y = 0;
     }
   }
+  /**
+   * Normalizes the vector's components IN-PLACE.
+   * Forces the vector's components to be exactly 1 while preserving its direction.
+   */
+  public digitalNormalize(): void {
+    if (this.x != 0) this.x /= Math.abs(this.x);
+    if (this.y != 0) this.y /= Math.abs(this.y);
+  }
 
   /**
    * Translates this vector by adding another vector's components.
