@@ -1,6 +1,7 @@
 import {
   ButtonBinding,
   CompositeBinding,
+  OneDimensionalAxisBinding,
   VectorBinding,
 } from "./lib/utils/InputManager/InputAction/Bindings.js";
 import {
@@ -11,8 +12,8 @@ import { InputMapType } from "./lib/utils/InputManager/InputManager.js";
 import KeyCode from "./lib/utils/InputManager/KeyCode.js";
 
 const InputMap: InputMapType = [
-  new InputAction("Movement", ActionType.Value, false),
-  new InputAction("Jump", ActionType.Button),
+  new InputAction("Movement", ActionType.Value),
+  new InputAction("Up/Down", ActionType.Value),
   new InputAction("Look", ActionType.Value, true),
 ];
 
@@ -24,7 +25,12 @@ InputMap[0].attachBindings([
     left: KeyCode.A,
   }),
 ]);
-InputMap[1].attachBindings([new ButtonBinding(KeyCode.Space)]);
+InputMap[1].attachBindings([
+  new OneDimensionalAxisBinding({
+    positive: KeyCode.Space,
+    negative: KeyCode.ShiftLeft,
+  }),
+]);
 InputMap[2].attachBindings([new VectorBinding(KeyCode.MouseDelta)]);
 
 export default InputMap;

@@ -3,6 +3,7 @@ import Engine from "./lib/Engine.js";
 import { InputAction } from "./lib/utils/InputManager/InputAction/InputAction.js";
 import { InputManager } from "./lib/utils/InputManager/InputManager.js";
 import Time from "./lib/utils/Time.js";
+import Vector2 from "./lib/utils/Vectors/Vector2.js";
 import Vector3 from "./lib/utils/Vectors/Vector3.js";
 
 // Awake is called before the game starts
@@ -17,6 +18,7 @@ const cube = new Cube(
 );
 let lookAction: InputAction;
 let movementAction: InputAction;
+let upDownAction: InputAction;
 // Start is called only on the first frame
 const start = () => {
   Engine.start();
@@ -24,6 +26,7 @@ const start = () => {
   window.addEventListener("focus", InputManager.requestPointerLock);
   movementAction = InputManager.getAction("Movement")!;
   lookAction = InputManager.getAction("Look")!;
+  upDownAction = InputManager.getAction("Up/Down")!;
 };
 const speed = 10;
 // Update is called once for each frame
@@ -42,7 +45,7 @@ const update = (time: number) => {
   cube.transform.translate(
     new Vector3(
       movementDelta!.x * speed * Time.deltaTime,
-      0,
+      upDownAction.axis! * speed * Time.deltaTime,
       movementDelta!.y * speed * Time.deltaTime,
     ),
   );
