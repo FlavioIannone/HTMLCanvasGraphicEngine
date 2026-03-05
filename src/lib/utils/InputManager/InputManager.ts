@@ -62,7 +62,7 @@ export class InputManager {
     this.Enable();
     this._inputActions = InputMap;
 
-    // --- PRE-COMPILATION PHASE ---
+    // #region--- PRE-COMPILATION PHASE ---
     for (let i = 0; i < this._inputActions.length; i++) {
       const action = this._inputActions[i];
 
@@ -95,11 +95,19 @@ export class InputManager {
               }
             };
 
-            // Map standard 2D cartesian axes (WASD style)
-            registerDirection(comp.up, 0, 1);
-            registerDirection(comp.down, 0, -1);
-            registerDirection(comp.left, -1, 0);
-            registerDirection(comp.right, 1, 0);
+            // Type Guard: Check if it's a 2D Composite (WASD)
+            if ("up" in comp) {
+              registerDirection(comp.up, 0, 1);
+              registerDirection(comp.down, 0, -1);
+              registerDirection(comp.left, -1, 0);
+              registerDirection(comp.right, 1, 0);
+            }
+            // Type Guard: Check if it's a 1D Composite (e.g., W/S or A/D)
+            else if ("positive" in comp) {
+              // By convention, 1D axes accumulate on the X axis, leaving Y at 0.
+              registerDirection(comp.positive, 1, 0);
+              registerDirection(comp.negative, -1, 0);
+            }
           }
 
           // 2. Handle direct vectors
@@ -113,6 +121,16 @@ export class InputManager {
         });
       }
     }
+    //#endregion
+
+    // --- BROWSER SAFETY NET ---
+    // Warns the user if they accidentally press Ctrl+W, Alt+F4, or click the Close button.
+    window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
+      // Modern browsers require preventDefault() and setting returnValue to trigger the prompt.
+      // Note: Browsers will display their own generic warning message for security reasons.
+      e.preventDefault();
+      e.returnValue = "";
+    });
 
     // --- DOM EVENT LISTENERS ---
     document.addEventListener("keydown", (e) => {

@@ -3,6 +3,7 @@ import {
   Binding,
   ButtonBinding,
   CompositeBinding,
+  OneDimensionalAxisBinding,
   VectorBinding,
 } from "./Bindings.js";
 
@@ -99,6 +100,13 @@ export class InputAction {
     return this._delta;
   }
 
+  public get axis(): number | null {
+    if (this._delta) {
+      return this._delta.x;
+    }
+    return null;
+  }
+
   public attachBinding(binding: Binding): void {
     if (
       this._actionType === ActionType.Button &&
@@ -107,7 +115,9 @@ export class InputAction {
       this._bindings.push(binding);
     } else if (
       this._actionType === ActionType.Value &&
-      (binding instanceof CompositeBinding || binding instanceof VectorBinding)
+      (binding instanceof CompositeBinding ||
+        binding instanceof VectorBinding ||
+        binding instanceof OneDimensionalAxisBinding)
     ) {
       this._bindings.push(binding);
     } else {
