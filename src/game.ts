@@ -16,24 +16,34 @@ const cube = new Cube(
   new Vector3(1, 1, 1),
 );
 let lookAction: InputAction;
+let movementAction: InputAction;
 // Start is called only on the first frame
 const start = () => {
   Engine.start();
   window.addEventListener("resize", Engine.onWindowResize);
   window.addEventListener("focus", InputManager.requestPointerLock);
+  movementAction = InputManager.getAction("Movement")!;
   lookAction = InputManager.getAction("Look")!;
 };
-
+const speed = 10;
 // Update is called once for each frame
 const update = (time: number) => {
   Engine.update(time);
   cube.update();
-  const delta = lookAction.rawDelta;
+  const mouseDelta = lookAction.rawDelta;
+  const movementDelta = movementAction.delta;
   cube.transform.rotate(
     new Vector3(
-      (delta!.y / 10) * Time.deltaTime,
-      -(delta!.x / 10) * Time.deltaTime,
+      (mouseDelta!.y / 10) * Time.deltaTime,
+      -(mouseDelta!.x / 10) * Time.deltaTime,
       0,
+    ),
+  );
+  cube.transform.translate(
+    new Vector3(
+      movementDelta!.x * speed * Time.deltaTime,
+      0,
+      movementDelta!.y * speed * Time.deltaTime,
     ),
   );
 

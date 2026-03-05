@@ -1,4 +1,3 @@
-import config from "../../game.config.js";
 import GameObject from "../../GameObjects/GameObject.js";
 import Engine from "../Engine.js";
 import Mesh from "../Meshes/Mesh.js";
@@ -24,7 +23,7 @@ type RenderableTriangle = {
 /**
  * Handles the rendering pipeline for a specific GameObject.
  * Transforms local mesh vertices into world space, projects them to screen space,
- * and rasterizes the resulting triangles using an Object Pool for zero memory allocation.
+ * culls hidden faces, and rasterizes using an Object Pool for zero memory allocation.
  */
 export default class Renderer {
   private gameObject: GameObject;
@@ -34,12 +33,15 @@ export default class Renderer {
   private _workVec4: Vector4 = new Vector4(0, 0, 0, 1);
   private _workVec3: Vector3 = new Vector3(0, 0, 0);
 
-  // Object Pool: Pre-allocated array of triangles for the rendering pipeline.
+  // Object Pool: Pre-allocated array of triangles.
   private _trianglesToDraw: RenderableTriangle[] = [];
+
+  // Tracks how many pooled triangles are actually visible in the current frame.
+  private _activeTriangleCount: number = 0;
 
   /**
    * Initializes the Renderer for a specific GameObject and its Mesh.
-   * Pre-allocates memory for the rendering pipeline based on the mesh size.
+   * Pre-allocates memory for the maximum possible triangles.
    * @param gameObject The owner of this renderer.
    * @param mesh The 3D geometry to draw.
    */
@@ -47,7 +49,7 @@ export default class Renderer {
     this.gameObject = gameObject;
     this.mesh = mesh;
 
-    // PRE-ALLOCATION (Object Pool): Create the exact number of objects needed once.
+    // PRE-ALLOCATION: Create the exact number of objects needed once.
     for (let i = 0; i < this.mesh.triangles.length; i++) {
       this._trianglesToDraw.push({
         p1: new Vector2(),
@@ -64,8 +66,8 @@ export default class Renderer {
    */
   update() {
     const projectedVertexes = this.getLocalVertexes();
-    const trianglesToDraw = this.getTriangles(projectedVertexes);
-    this.render(trianglesToDraw);
+    this.processTriangles(projectedVertexes);
+    this.render();
   }
 
   /**
@@ -107,16 +109,13 @@ export default class Renderer {
   }
 
   /**
-   * Assembles projected vertices into 2D triangles and computes their average depth.
-   * Sorts the array so that further triangles are drawn first (Painter's Algorithm).
-   * Uses the pre-allocated Object Pool to achieve zero memory allocation per frame.
-   * @param projectedVertexes The array of fully transformed screen-space vertices.
-   * @returns An array of sorted triangles ready for rendering.
+   * Assembles projected vertices, performs Back-face Culling, computes depth,
+   * and sorts the active pool using the Painter's Algorithm.
+   * @param projectedVertexes Fully transformed screen-space vertices.
    */
-  private getTriangles(
-    projectedVertexes: ProjectedVertex[],
-  ): RenderableTriangle[] {
-    // Iterate over the mesh faces and mutate the pre-allocated objects
+  private processTriangles(projectedVertexes: ProjectedVertex[]): void {
+    this._activeTriangleCount = 0; // Reset active counter for this frame
+
     for (let i = 0; i < this.mesh.triangles.length; i++) {
       const tri = this.mesh.triangles[i];
 
@@ -124,8 +123,18 @@ export default class Renderer {
       const v2 = projectedVertexes[tri.vertexes[1]];
       const v3 = projectedVertexes[tri.vertexes[2]];
 
-      // Grab the pooled object instead of creating a new one
-      const pooledTriangle = this._trianglesToDraw[i];
+      // --- BACK-FACE CULLING (2D Cross Product Optimization) ---
+      // Calculates the Z-component of the normal vector in screen space.
+      const normalZ =
+        (v2.position.x - v1.position.x) * (v3.position.y - v1.position.y) -
+        (v2.position.y - v1.position.y) * (v3.position.x - v1.position.x);
+
+      if (normalZ > 0) {
+        continue; // Face is pointing away. Skip it completely.
+      }
+
+      // Grab the NEXT AVAILABLE pooled object
+      const pooledTriangle = this._trianglesToDraw[this._activeTriangleCount];
 
       // Mutate its properties via reference assignment
       pooledTriangle.p1 = v1.position;
@@ -135,20 +144,32 @@ export default class Renderer {
       // Calculate and assign the average Z-depth
       pooledTriangle.avgDepth = (v1.depth + v2.depth + v3.depth) / 3;
       pooledTriangle.color = `rgb(${tri.color[0]}, ${tri.color[1]},${tri.color[2]})`;
+
+      this._activeTriangleCount++; // Increment active objects
+    }
+
+    // --- ZERO-ALLOCATION SORTING ---
+    // Push all inactive/culled triangles to the absolute bottom of the sort list
+    // to prevent garbage data from shifting into the active render range.
+    for (
+      let j = this._activeTriangleCount;
+      j < this._trianglesToDraw.length;
+      j++
+    ) {
+      this._trianglesToDraw[j].avgDepth = -Infinity;
     }
 
     // Sort descending: highest Z (furthest away) gets drawn first
     this._trianglesToDraw.sort((a, b) => b.avgDepth - a.avgDepth);
-    return this._trianglesToDraw;
   }
 
   /**
-   * Rasterizes the sorted triangles onto the HTML Canvas.
-   * @param trianglesToDraw The sorted array of triangles.
+   * Rasterizes ONLY the active, sorted triangles onto the HTML Canvas.
    */
-  private render(trianglesToDraw: RenderableTriangle[]) {
-    for (let i = 0; i < trianglesToDraw.length; i++) {
-      const tri = trianglesToDraw[i];
+  private render(): void {
+    // CRITICAL: We only loop up to _activeTriangleCount, ignoring culled faces
+    for (let i = 0; i < this._activeTriangleCount; i++) {
+      const tri = this._trianglesToDraw[i];
 
       Engine.context.beginPath();
       Engine.context.moveTo(tri.p1.x, tri.p1.y);
@@ -156,11 +177,9 @@ export default class Renderer {
       Engine.context.lineTo(tri.p3.x, tri.p3.y);
       Engine.context.closePath();
 
-      // Fill the triangle with the configured solid color
       Engine.context.fillStyle = tri.color;
       Engine.context.fill();
 
-      // Draw wireframe borders to distinguish faces of the same color
       Engine.context.strokeStyle = tri.color;
       Engine.context.lineWidth = 1;
       Engine.context.stroke();
