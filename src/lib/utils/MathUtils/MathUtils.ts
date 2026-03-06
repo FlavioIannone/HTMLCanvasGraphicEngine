@@ -3,6 +3,29 @@
  * used throughout the graphics engine.
  */
 export default class MathUtils {
+  public static readonly DEG2RAD = Math.PI / 180;
+  public static readonly TWO_PI = Math.PI * 2;
+
+  /**
+   * Normalizes any angle in degrees to its strictly positive canonical form [0, 360).
+   * Safely handles negative angles by computing the true Euclidean modulo
+   * @param angleDegrees The angle in degrees.
+   * @returns The canonical angle between 0 and 359.999...
+   */
+  public static normalizeAngleDegrees(angleDegrees: number): number {
+    return ((angleDegrees % 360) + 360) % 360;
+  }
+
+  /**
+   * Normalizes any angle in radians to its strictly positive canonical form [0, 2PI).
+   * Safely handles negative angles by computing the true Euclidean modulo
+   * @param angleRadians The angle in degrees.
+   * @returns The canonical angle between 0 and 1.9999.... * PI
+   */
+  public static normalizeAngleRadians(angleRadians: number): number {
+    return ((angleRadians % this.TWO_PI) + this.TWO_PI) % this.TWO_PI;
+  }
+
   /**
    * Re-maps a number from one range to another.
    * WARNING: This function does NOT constrain the value to the output range (Extrapolation).

@@ -1,3 +1,4 @@
+import MathUtils from "../utils/MathUtils/MathUtils.js";
 import { Matrix4 } from "../utils/Matrices/Matrix4.js";
 import Vector3 from "../utils/Vectors/Vector3.js";
 
@@ -11,7 +12,10 @@ export default class Transform {
   private _position: Vector3;
 
   /** The rotation of the object represented as Euler angles (Pitch, Yaw, Roll) in radians. */
-  private _rotation: Vector3;
+  private _radRotation: Vector3;
+
+  /** The rotation of the object represented as Euler angles (Pitch, Yaw, Roll) in degrees. */
+  private _degRotation: Vector3;
 
   /** The scale/dimensions of the object relative to its local origin. */
   private _scale: Vector3;
@@ -45,7 +49,12 @@ export default class Transform {
    */
   constructor(position: Vector3, rotation: Vector3, scale: Vector3) {
     this._position = new Vector3(position.x, position.y, position.z);
-    this._rotation = new Vector3(rotation.x, rotation.y, rotation.z);
+    this._degRotation = new Vector3(rotation.x, rotation.y, rotation.z);
+    this._radRotation = new Vector3(
+      rotation.x * MathUtils.DEG2RAD,
+      rotation.y * MathUtils.DEG2RAD,
+      rotation.z * MathUtils.DEG2RAD,
+    );
     this._scale = new Vector3(scale.x, scale.y, scale.z);
   }
 
@@ -60,35 +69,26 @@ export default class Transform {
 
   /** Gets the current rotation vector in Euler angles. Treat as read-only. */
   public get rotation(): Readonly<Vector3> {
-    return this._rotation;
+    return this._degRotation;
+  }
+
+  public get radRotation(): Readonly<Vector3> {
+    return this._radRotation;
   }
 
   /** Gets the current scale vector. Treat as read-only. */
   public get scale(): Readonly<Vector3> {
     return this._scale;
   }
-  public get position_clone(): Vector3 {
-    return new Vector3(this._position.x, this._position.y, this._position.z);
-  }
-
-  /** Gets the current rotation vector in Euler angles. Treat as read-only. */
-  public get rotation_clone(): Vector3 {
-    return new Vector3(this._rotation.x, this._rotation.y, this._rotation.z);
-  }
-
-  /** Gets the current scale vector. Treat as read-only. */
-  public get scale_clone(): Vector3 {
-    return new Vector3(this._scale.x, this._scale.y, this._scale.z);
-  }
 
   /** * The normalized directional vector pointing "Forward" relative to the object's rotation.
    * Essential for Camera LookAt math and character movement.
    */
   public get forward(): Readonly<Vector3> {
-    const cy = Math.cos(this._rotation.y); // Yaw
-    const sy = Math.sin(this._rotation.y);
-    const cx = Math.cos(this._rotation.x); // Pitch
-    const sx = Math.sin(this._rotation.x);
+    const cy = Math.cos(this._radRotation.y); // Yaw
+    const sy = Math.sin(this._radRotation.y);
+    const cx = Math.cos(this._radRotation.x); // Pitch
+    const sx = Math.sin(this._radRotation.x);
 
     this._forward.x = sy * cx;
     this._forward.y = -sx;
@@ -101,8 +101,8 @@ export default class Transform {
 
   /** The normalized directional vector pointing "Right". */
   public get right(): Readonly<Vector3> {
-    const cy = Math.cos(this._rotation.y);
-    const sy = Math.sin(this._rotation.y);
+    const cy = Math.cos(this._radRotation.y);
+    const sy = Math.sin(this._radRotation.y);
 
     // Right vector ignores Pitch (X) for FPS camera stability
     this._right.x = cy;
@@ -131,11 +131,19 @@ export default class Transform {
     this._isDirty = true;
   }
 
-  /** Sets a new absolute rotation and marks the transform as dirty. */
+  /** Sets a new absolute rotation and marks the transform as dirty.
+   * @param r The new rotation in degrees
+   */
   public set rotation(r: Vector3) {
-    this._rotation.x = r.x;
-    this._rotation.y = r.y;
-    this._rotation.z = r.z;
+    const degRx = MathUtils.normalizeAngleDegrees(r.x);
+    const degRy = MathUtils.normalizeAngleDegrees(r.y);
+    const degRz = MathUtils.normalizeAngleDegrees(r.z);
+    this._degRotation.x = degRx;
+    this._degRotation.y = degRy;
+    this._degRotation.z = degRz;
+    this._radRotation.x = degRx * MathUtils.DEG2RAD;
+    this._radRotation.y = degRy * MathUtils.DEG2RAD;
+    this._radRotation.z = degRz * MathUtils.DEG2RAD;
     this._isDirty = true;
   }
 
@@ -157,7 +165,7 @@ export default class Transform {
       // 1. Generate individual transformation matrices
       Matrix4.makeTranslationMatrix4(this._position, this._tempMatT);
       Matrix4.makeXYZRotationMatrix4(
-        this._rotation,
+        this._radRotation,
         this._mX,
         this._mY,
         this._mZ,
@@ -199,12 +207,21 @@ export default class Transform {
 
   /**
    * Rotates the object by adding the given delta angles to its current rotation.
-   * @param delta - The amount to rotate (in radians) along the X, Y, and Z axes.
+   * @param delta - The amount to rotate (in degrees) along the X, Y, and Z axes.
    */
-  public rotate(delta: Vector3): void {
-    this._rotation.x += delta.x;
-    this._rotation.y += delta.y;
-    this._rotation.z += delta.z;
+  public rotate(delta: Readonly<Vector3>): void {
+    this._degRotation.x += delta.x;
+    this._degRotation.y += delta.y;
+    this._degRotation.z += delta.z;
+
+    this._degRotation.x = MathUtils.normalizeAngleDegrees(this._degRotation.x);
+    this._degRotation.y = MathUtils.normalizeAngleDegrees(this._degRotation.y);
+    this._degRotation.z = MathUtils.normalizeAngleDegrees(this._degRotation.z);
+
+    this._radRotation.x = this._degRotation.x * MathUtils.DEG2RAD;
+    this._radRotation.y = this._degRotation.y * MathUtils.DEG2RAD;
+    this._radRotation.z = this._degRotation.z * MathUtils.DEG2RAD;
+
     this._isDirty = true;
   }
 }
