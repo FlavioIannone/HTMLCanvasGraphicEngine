@@ -67,7 +67,7 @@ export class CompositeBinding implements Binding {
  * Maps an axis with two opposing directions (e.g., Forward/Backward or Left/Right).
  * Represents a 1D vector accumulation.
  */
-export class OneDimensionalAxisBinding implements Binding {
+export class Axis1DBinding implements Binding {
   inputPath: InputPath;
 
   // Maps strictly to a positive and negative KeyCode

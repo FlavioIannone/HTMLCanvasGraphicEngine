@@ -76,7 +76,10 @@ export class InputManager {
               .push({ action, isButton: true, deltaX: 0, deltaY: 0 });
           }
         });
-      } else if (action.actionType === ActionType.Value) {
+      } else if (
+        action.actionType === ActionType.Value ||
+        action.actionType == ActionType.Delta
+      ) {
         action.bindings.forEach((b) => {
           // 1. Handle composite
           const comp = b.inputPath.composite;
@@ -172,6 +175,7 @@ export class InputManager {
 
       // We look up whatever action is bound to our virtual MouseDelta string
       const targets = this._keyMap.get(KeyCode.MouseDelta);
+
       if (targets) {
         for (let i = 0; i < targets.length; i++) {
           // Feed the raw pixel movement directly into the action's accumulator

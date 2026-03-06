@@ -3,17 +3,19 @@ import {
   Binding,
   ButtonBinding,
   CompositeBinding,
-  OneDimensionalAxisBinding,
+  Axis1DBinding,
   VectorBinding,
 } from "./Bindings.js";
 
-export enum ControlType {
+export enum Processor {
   Vector2,
-  Integer,
+  NormalizedVector2,
+  DigitalNormalizedVector2,
 }
 
 export enum ActionType {
   Value,
+  Delta,
   Button,
 }
 
@@ -24,13 +26,12 @@ export enum ActionType {
 export class InputAction {
   private _actionName: string;
   private _actionType: ActionType;
+  private _processor?: Processor;
   private _bindings: Binding[];
-
-  // Flag to determine if this action should reset to zero every frame (e.g., Mouse movement)
-  private _isDelta: boolean;
 
   private _delta: Vector2 | null = null;
   private _normalizedDelta: Vector2 | null = null;
+  private _digitalNormalizedDelta: Vector2 | null = null;
   private _isPressed: boolean = false;
 
   private _wasPressedThisFrame: boolean = false;
@@ -39,11 +40,11 @@ export class InputAction {
   constructor(
     actionName: string,
     actionType: ActionType,
-    isDelta: boolean = false,
+    processor?: Processor,
   ) {
     this._actionName = actionName;
     this._actionType = actionType;
-    this._isDelta = isDelta; // True for mouse look, false for WASD movement
+    this._processor = processor;
 
     if (actionType === ActionType.Button) {
       this._bindings = new Array<ButtonBinding>();
@@ -52,9 +53,10 @@ export class InputAction {
       this._bindings = new Array<Binding>();
     }
 
-    if (actionType === ActionType.Value) {
+    if (actionType == ActionType.Value || actionType == ActionType.Delta) {
       this._delta = new Vector2(0, 0);
       this._normalizedDelta = new Vector2(0, 0);
+      this._digitalNormalizedDelta = new Vector2(0, 0);
     }
   }
 
@@ -64,11 +66,12 @@ export class InputAction {
   public get actionType(): ActionType {
     return this._actionType;
   }
-  public get isPressed(): boolean {
-    return this._isPressed;
-  }
   public get bindings(): Readonly<Binding[]> {
     return this._bindings;
+  }
+
+  public get isPressed(): boolean {
+    return this._isPressed;
   }
 
   public get wasPressedThisFrame(): boolean {
@@ -79,25 +82,27 @@ export class InputAction {
   }
 
   /**
-   * Retrieves the NORMALIZED direction.
+   * Preprocesses the delta:
+   * - If the Processor == Processor.DigitalNormalizedVector2 -> returns the delta normilized digitally
+   * - If the Processor == Processor.NormalizedVector2 -> returns the delta normilized
+   * - If the Processor == Processor.Vector2 -> returns the raw delta
    * Use this for WASD movement to prevent faster diagonal speed.
    */
   public get delta(): Readonly<Vector2 | null> {
-    if (this._delta && this._normalizedDelta) {
-      this._normalizedDelta.x = this._delta.x;
-      this._normalizedDelta.y = this._delta.y;
-      this._normalizedDelta.normalize();
-      return this._normalizedDelta;
+    if (this._delta && this._normalizedDelta && this._digitalNormalizedDelta) {
+      if (this._processor == Processor.DigitalNormalizedVector2) {
+        this._digitalNormalizedDelta.x = this._delta.x;
+        this._digitalNormalizedDelta.y = this._delta.y;
+        this._digitalNormalizedDelta.digitalNormalize();
+      }
+      if (this._processor == Processor.NormalizedVector2) {
+        this._normalizedDelta.x = this._delta.x;
+        this._normalizedDelta.y = this._delta.y;
+        this._normalizedDelta.normalize();
+      }
+      return this._delta;
     }
     return null;
-  }
-
-  /**
-   * Retrieves the RAW, un-normalized values.
-   * CRITICAL: Use this for Mouse movement to preserve user swipe speed/distance.
-   */
-  public get rawDelta(): Readonly<Vector2 | null> {
-    return this._delta;
   }
 
   public get axis(): number | null {
@@ -114,10 +119,11 @@ export class InputAction {
     ) {
       this._bindings.push(binding);
     } else if (
-      this._actionType === ActionType.Value &&
+      (this._actionType === ActionType.Value ||
+        this._actionType == ActionType.Delta) &&
       (binding instanceof CompositeBinding ||
         binding instanceof VectorBinding ||
-        binding instanceof OneDimensionalAxisBinding)
+        binding instanceof Axis1DBinding)
     ) {
       this._bindings.push(binding);
     } else {
@@ -183,7 +189,7 @@ export class InputAction {
     this._wasReleasedThisFrame = false;
 
     // Stop the "Infinite Spin" illusion
-    if (this._isDelta && this._delta) {
+    if (this._actionType == ActionType.Delta && this._delta) {
       this._delta.x = 0;
       this._delta.y = 0;
     }

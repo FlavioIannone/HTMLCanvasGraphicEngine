@@ -54,7 +54,8 @@ const start = () => {
 const update = (time: number) => {
   Engine.update(time);
 
-  const mouseDelta = lookAction.rawDelta;
+  const mouseDelta = lookAction.delta;
+
   const movementDelta = movementAction.delta;
   const t = Camera.main.transform;
 
