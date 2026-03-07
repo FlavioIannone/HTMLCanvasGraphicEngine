@@ -94,10 +94,42 @@ export default class Vector3 {
   }
 
   /**
+   * Performs Linear Interpolation (Lerp) between two vectors.
+   * Calculates a point exactly 't' percent along the line from 'start' to 'end'.
+   * Built for Zero-Allocation: mutates the 'out' vector in-place.
+   *  @param start The starting point (t = 0).
+   * @param end The ending point (t = 1).
+   * @param t The interpolation factor [0.0 to 1.0].
+   * @param out The pre-allocated Vector3 to store the result.
+   */
+  public static lerp(
+    start: Vector3,
+    end: Vector3,
+    t: number,
+    out: Vector3,
+  ): void {
+    // Cache inputs to allow 'out' to be the same as the input points without aliasing bugs
+
+    const startX = start.x;
+    const startY = start.y;
+    const startZ = start.z;
+
+    out.x = startX + t * (end.x - startX);
+    out.y = startY + t * (end.y - startY);
+    out.z = startZ + t * (end.z - startZ);
+  }
+
+  /**
    * Computes the Dot Product of two vectors.
    */
   public static dotProduct(a: Readonly<Vector3>, b: Readonly<Vector3>): number {
     return a.x * b.x + a.y * b.y + a.z * b.z;
+  }
+
+  public static copyTo(from: { x: number; y: number; z: number }, to: Vector3) {
+    to.x = from.x;
+    to.y = from.y;
+    to.z = from.z;
   }
 
   /**

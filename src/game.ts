@@ -1,20 +1,28 @@
+import config from "./game.config.js";
 import Cube from "./GameObjects/Cube.js";
 import Camera from "./lib/Camera/Camera.js";
 import Engine from "./lib/Engine.js";
 import { InputAction } from "./lib/utils/InputManager/InputAction/InputAction.js";
 import { InputManager } from "./lib/utils/InputManager/InputManager.js";
+import MathUtils from "./lib/utils/MathUtils/MathUtils.js";
 import Time from "./lib/utils/Time.js";
 import Vector3 from "./lib/utils/Vectors/Vector3.js";
 
 // Global references to game entities and input actions
-let cube: Cube;
+let cube1: Cube;
+let cube2: Cube;
 let lookAction: InputAction;
 let movementAction: InputAction;
 let upDownAction: InputAction;
+let fps = 0;
 
 // Movement configuration
 const speed = 10;
-const lookSpeed = 0.05;
+const lookSpeed = 5;
+const minUpperLookAngle = -89;
+const maxUpperLookAngle = 89;
+
+let timeoutSetted = false;
 
 /**
  * Phase 1: Awake
@@ -43,9 +51,23 @@ const start = () => {
   upDownAction = InputManager.getAction("Up/Down")!;
 
   // Spawn a cube 5 units in front of the camera
-  cube = new Cube(new Vector3(0, 0, 5), new Vector3(), new Vector3(1, 1, 1));
+  cube1 = new Cube(
+    new Vector3(0, 0, 20),
+    new Vector3(0, 45, 0),
+    new Vector3(1, 1, 1),
+  );
+  cube2 = new Cube(new Vector3(0, 0, -20), new Vector3(), new Vector3(1, 1, 1));
 };
 
+const writeText = (string: string, x: number, y: number) => {
+  Engine.context.fillStyle = "rgb(0,0,0)";
+  Engine.context.font = "50px Arial";
+  const measures = Engine.context.measureText(string);
+
+  Engine.context.fillText(string, x, y + measures.actualBoundingBoxAscent);
+};
+
+let cameraRotation: Vector3;
 /**
  * Phase 3: Main Game Loop
  * Executed once per frame. Handles physics, input routing, and rendering scheduling.
@@ -53,6 +75,15 @@ const start = () => {
  */
 const update = (time: number) => {
   Engine.update(time);
+
+  writeText(String(fps), 10, 10);
+  if (!timeoutSetted) {
+    timeoutSetted = true;
+    setTimeout(() => {
+      fps = parseInt(String(1 / Time.deltaTime));
+      timeoutSetted = false;
+    }, 1000);
+  }
 
   const mouseDelta = lookAction.delta;
 
@@ -63,6 +94,7 @@ const update = (time: number) => {
   if (mouseDelta) {
     // Pitch (X-axis) and Yaw (Y-axis) rotation.
     // Framerate-independent rotation via Time.deltaTime.
+
     t.rotate(
       new Vector3(
         mouseDelta.y * lookSpeed * Time.deltaTime,
@@ -70,6 +102,12 @@ const update = (time: number) => {
         0,
       ),
     );
+    t.rotation = new Vector3(
+      MathUtils.clamp(t.rotation.x, minUpperLookAngle, maxUpperLookAngle),
+      t.rotation.y,
+      t.rotation.z,
+    );
+    // t.rotation = new Vector3(cameraRotation.x, cameraRotation.y, 0);
   }
 
   // --- 2. LOCAL TRANSLATION (WASD FPS MOVEMENT) ---
@@ -119,7 +157,8 @@ const update = (time: number) => {
   // --- 4. RENDER PIPELINE ---
   // The Cube is updated and rendered ONLY AFTER the camera has finished
   // calculating its final position and View Matrix for this frame.
-  cube.update();
+  cube1.update();
+  cube2.update();
 
   // --- 5. CLEANUP ---
   // Wipes instantaneous input deltas (like mouse movement) so they don't

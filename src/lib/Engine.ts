@@ -148,11 +148,11 @@ export default class Engine {
   public static setCanvas(): void {
     // Calculate the high-resolution internal buffer size
     config.screenConfig.width = window.innerWidth * window.devicePixelRatio;
-    config.screenConfig.height = window.innerHeight * window.devicePixelRatio;
+    config.screenConfig.heigth = window.innerHeight * window.devicePixelRatio;
 
     // Apply the resolution directly to the physical canvas grid
     Engine.canvas.width = config.screenConfig.width;
-    Engine.canvas.height = config.screenConfig.height;
+    Engine.canvas.height = config.screenConfig.heigth;
 
     // Force the projection matrix to rebuild with the new aspect ratio
     // This prevents the 3D world from stretching or squashing.

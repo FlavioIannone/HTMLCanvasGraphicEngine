@@ -13,7 +13,7 @@ export type Color = [number, number, number];
 
 export type ScreenConfig = {
   width: number;
-  height: number;
+  heigth: number;
   fov: number;
   z_near: number;
   z_far: number;

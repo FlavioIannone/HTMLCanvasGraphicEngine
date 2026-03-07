@@ -135,9 +135,9 @@ export default class Transform {
    * @param r The new rotation in degrees
    */
   public set rotation(r: Vector3) {
-    const degRx = MathUtils.normalizeAngleDegrees(r.x);
-    const degRy = MathUtils.normalizeAngleDegrees(r.y);
-    const degRz = MathUtils.normalizeAngleDegrees(r.z);
+    const degRx = r.x;
+    const degRy = r.y;
+    const degRz = r.z;
     this._degRotation.x = degRx;
     this._degRotation.y = degRy;
     this._degRotation.z = degRz;
@@ -214,9 +214,9 @@ export default class Transform {
     this._degRotation.y += delta.y;
     this._degRotation.z += delta.z;
 
-    this._degRotation.x = MathUtils.normalizeAngleDegrees(this._degRotation.x);
-    this._degRotation.y = MathUtils.normalizeAngleDegrees(this._degRotation.y);
-    this._degRotation.z = MathUtils.normalizeAngleDegrees(this._degRotation.z);
+    this._degRotation.x = this._degRotation.x;
+    this._degRotation.y = this._degRotation.y;
+    this._degRotation.z = this._degRotation.z;
 
     this._radRotation.x = this._degRotation.x * MathUtils.DEG2RAD;
     this._radRotation.y = this._degRotation.y * MathUtils.DEG2RAD;

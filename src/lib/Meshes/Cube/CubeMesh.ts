@@ -5,7 +5,7 @@ import Mesh from "../Mesh.js";
 
 export default class CubeMesh implements Mesh {
   vertexes: Vector3[];
-  projectedVertexes: ProjectedVertex[];
+  cameraSpaceVertexes: Vector3[];
   triangles: Triangle[];
   size: Vector3;
 
@@ -24,13 +24,17 @@ export default class CubeMesh implements Mesh {
       new Vector3(-this.size.x, -this.size.y, -this.size.z),
     ];
 
-    this.projectedVertexes = []; // Instantiate the projected vertexes once, then, on every render iteration the state of the vertex will be mutated, for performance implications.
-    for (let i = 0; i < 8; i++) {
-      this.projectedVertexes.push({
-        position: new Vector2(),
-        depth: 0,
-      });
-    }
+    this.cameraSpaceVertexes = [
+      new Vector3(-this.size.x, this.size.y, this.size.z),
+      new Vector3(this.size.x, this.size.y, this.size.z),
+      new Vector3(this.size.x, -this.size.y, this.size.z),
+      new Vector3(-this.size.x, -this.size.y, this.size.z),
+
+      new Vector3(-this.size.x, this.size.y, -this.size.z),
+      new Vector3(this.size.x, this.size.y, -this.size.z),
+      new Vector3(this.size.x, -this.size.y, -this.size.z),
+      new Vector3(-this.size.x, -this.size.y, -this.size.z),
+    ];
 
     this.triangles = [
       { vertexes: [0, 1, 2], color: [255, 0, 0] },

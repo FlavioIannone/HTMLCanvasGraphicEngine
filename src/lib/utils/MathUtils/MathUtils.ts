@@ -27,6 +27,28 @@ export default class MathUtils {
   }
 
   /**
+   * Calculates the linear interpolation factor (t) where a line segment
+   * intersects a specific depth plane (Z-Near).
+   * @param zNear The depth of the clipping plane.
+   * @param zInside The Z coordinate of the vertex inside the frustum.
+   * @param zOutside The Z coordinate of the vertex outside the frustum.
+   * @returns A float between 0.0 and 1.0 representing the intersection point.
+   */
+  public static getPlaneIntersectionFactor(
+    zNear: number,
+    zInside: number,
+    zOutside: number,
+  ): number {
+    const denominator = zOutside - zInside;
+
+    if (Math.abs(denominator) < 0.00001) {
+      return 0;
+    }
+
+    return (zNear - zInside) / denominator;
+  }
+
+  /**
    * Re-maps a number from one range to another.
    * WARNING: This function does NOT constrain the value to the output range (Extrapolation).
    * If 'value' is outside [inMin, inMax], the result will be outside [outMin, outMax].

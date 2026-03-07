@@ -58,7 +58,7 @@ export default class Screen {
       0,
       0,
       config.screenConfig.width,
-      config.screenConfig.height,
+      config.screenConfig.heigth,
     );
   }
 
@@ -67,7 +67,7 @@ export default class Screen {
    * @returns The aspect ratio
    */
   public static getAspectRatio(): number {
-    return config.screenConfig.width / config.screenConfig.height;
+    return config.screenConfig.width / config.screenConfig.heigth;
   }
 
   /**
@@ -133,7 +133,7 @@ export default class Screen {
    */
   public static toScreen(p: Vector2): Vector2 {
     p.x = ((p.x + 1) / 2) * config.screenConfig.width;
-    p.y = (1 - (p.y + 1) / 2) * config.screenConfig.height;
+    p.y = (1 - (p.y + 1) / 2) * config.screenConfig.heigth;
     return p; // Returning the mutated input
   }
 }

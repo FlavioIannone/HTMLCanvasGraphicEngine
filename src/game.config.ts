@@ -13,10 +13,10 @@ const config: GameConfig = {
   foregroundColor: "#000000",
   screenConfig: {
     width: 1200,
-    height: 900,
+    heigth: 900,
     fov: 80,
     z_far: 10,
-    z_near: 1,
+    z_near: 0.1,
   },
 };
 
