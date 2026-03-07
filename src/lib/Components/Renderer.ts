@@ -44,23 +44,9 @@ export default class Renderer {
   private _cameraSpaceTriangles: CameraSpaceTriangle[] = [];
   private _trianglesToDraw: RenderableTriangle[] = [];
 
-  // Temporary storage for clipping classification
-  private _validVertexes: [Vector3, Vector3, Vector3] = [
-    new Vector3(),
-    new Vector3(),
-    new Vector3(),
-  ];
-  private _invalidVertexes: [Vector3, Vector3, Vector3] = [
-    new Vector3(),
-    new Vector3(),
-    new Vector3(),
-  ];
-
   // --- COUNTERS ---
   private _activeCameraTriangleCount: number = 0;
   private _activeTriangleCount: number = 0;
-  private _validVertexesCount: number = 0;
-  private _invalidVertexesCount: number = 0;
 
   private _activeCamera: Camera;
 
@@ -142,13 +128,22 @@ export default class Renderer {
       const v2 = this.mesh.cameraSpaceVertexes[tri.vertexes[1]];
       const v3 = this.mesh.cameraSpaceVertexes[tri.vertexes[2]];
 
-      // --- TRIVIAL REJECT ---
-      if (v1.z < z_near && v2.z < z_near && v3.z < z_near) continue;
+      const d1 = v1.z - z_near;
+      const d2 = v2.z - z_near;
+      const d3 = v3.z - z_near;
+
+      let insideCount = 0;
+      if (d1 >= 0) insideCount++;
+      if (d2 >= 0) insideCount++;
+      if (d3 >= 0) insideCount++;
+
+      // --- CASE A: TRIVIAL REJECT (0 inside) ---
+      if (insideCount === 0) continue;
 
       const triColor = `rgb(${tri.color[0]},${tri.color[1]},${tri.color[2]})`;
 
-      // --- TRIVIAL ACCEPT ---
-      if (v1.z >= z_near && v2.z >= z_near && v3.z >= z_near) {
+      // --- CASE B: TRIVIAL ACCEPT (3 inside) ---
+      if (insideCount === 3) {
         const camTri =
           this._cameraSpaceTriangles[this._activeCameraTriangleCount++];
         Vector3.copyTo(v1, camTri.p1);
@@ -158,101 +153,80 @@ export default class Renderer {
         continue;
       }
 
-      // --- CLIPPING LOGIC ---
-      this._invalidVertexesCount = 0;
-      this._validVertexesCount = 0;
-      let isolatedVertexIndex = 0;
+      // --- GEOMETRIC ROTATION ---
+      // We rotate the vertices circularly (preserving winding) so that v0 is ALWAYS the "isolated" vertex.
+      let v0: Vector3, v1_mod: Vector3, v2_mod: Vector3;
 
-      // Classify vertices
-      const verts = [v1, v2, v3];
-      for (let j = 0; j < 3; j++) {
-        if (verts[j].z < z_near) {
-          Vector3.copyTo(
-            verts[j],
-            this._invalidVertexes[this._invalidVertexesCount++],
-          );
+      // CASE C: 1 Valid, 2 Invalid (Isolated is the VALID one)
+      if (insideCount === 1) {
+        if (d1 >= 0) {
+          v0 = v1;
+          v1_mod = v2;
+          v2_mod = v3;
+        } else if (d2 >= 0) {
+          v0 = v2;
+          v1_mod = v3;
+          v2_mod = v1;
         } else {
-          Vector3.copyTo(
-            verts[j],
-            this._validVertexes[this._validVertexesCount++],
-          );
-          isolatedVertexIndex = j + 1;
+          v0 = v3;
+          v1_mod = v1;
+          v2_mod = v2;
         }
-      }
 
-      // CASE C: 1 Valid, 2 Invalid (Generates 1 Triangle)
-      if (this._validVertexesCount === 1) {
         const camTri =
           this._cameraSpaceTriangles[this._activeCameraTriangleCount++];
-        const vValid = this._validVertexes[0];
-        const vInval1 = this._invalidVertexes[0];
-        const vInval2 = this._invalidVertexes[1];
 
-        Vector3.copyTo(vValid, camTri.p1);
-        const t1 = MathUtils.getPlaneIntersectionFactor(
-          z_near,
-          vValid.z,
-          vInval1.z,
-        );
-        Vector3.lerp(vValid, vInval1, t1, camTri.p2);
-        const t2 = MathUtils.getPlaneIntersectionFactor(
-          z_near,
-          vValid.z,
-          vInval2.z,
-        );
-        Vector3.lerp(vValid, vInval2, t2, camTri.p3);
+        // 1. Point 1 is the valid vertex
+        Vector3.copyTo(v0, camTri.p1);
+
+        // 2. Point 2 is the intersection between valid and first invalid
+        const t1 = MathUtils.getPlaneIntersectionFactor(z_near, v0.z, v1_mod.z);
+        Vector3.lerp(v0, v1_mod, t1, camTri.p2);
+
+        // 3. Point 3 is the intersection between valid and second invalid
+        const t2 = MathUtils.getPlaneIntersectionFactor(z_near, v0.z, v2_mod.z);
+        Vector3.lerp(v0, v2_mod, t2, camTri.p3);
+
         camTri.color = triColor;
-
-        // Fix Winding Order if V2 was the isolated one
-        if (isolatedVertexIndex === 2) {
-          Vector3.copyTo(camTri.p2, this._workVec3);
-          Vector3.copyTo(camTri.p3, camTri.p2);
-          Vector3.copyTo(this._workVec3, camTri.p3);
-        }
       }
-      // CASE D: 2 Valid, 1 Invalid (Generates 2 Triangles)
-      else if (this._validVertexesCount === 2) {
-        const vInval = this._invalidVertexes[0];
-        const vVal1 = this._validVertexes[0];
-        const vVal2 = this._validVertexes[1];
 
+      // CASE D: 2 Valid, 1 Invalid (Isolated is the INVALID one)
+      else if (insideCount === 2) {
+        if (d1 < 0) {
+          v0 = v1;
+          v1_mod = v2;
+          v2_mod = v3;
+        } else if (d2 < 0) {
+          v0 = v2;
+          v1_mod = v3;
+          v2_mod = v1;
+        } else {
+          v0 = v3;
+          v1_mod = v1;
+          v2_mod = v2;
+        }
+
+        // Here v1_mod and v2_mod are the two VALID vertices.
         const tri1 =
           this._cameraSpaceTriangles[this._activeCameraTriangleCount++];
-        Vector3.copyTo(vVal1, tri1.p1);
-        Vector3.copyTo(vVal2, tri1.p2);
-        const t1 = MathUtils.getPlaneIntersectionFactor(
-          z_near,
-          vVal1.z,
-          vInval.z,
-        );
-        Vector3.lerp(vVal1, vInval, t1, tri1.p3);
-        tri1.color = triColor;
-
         const tri2 =
           this._cameraSpaceTriangles[this._activeCameraTriangleCount++];
-        Vector3.copyTo(vVal2, tri2.p1);
-        Vector3.copyTo(tri1.p3, tri2.p2);
-        const t2 = MathUtils.getPlaneIntersectionFactor(
-          z_near,
-          vVal2.z,
-          vInval.z,
-        );
-        Vector3.lerp(vVal2, vInval, t2, tri2.p3);
-        tri2.color = triColor;
 
-        // Fix Winding Order if V3 was the invalid one (V1, V2 valid)
-        if (isolatedVertexIndex === 3) {
-          this.swapTriangleWinding(tri1);
-          this.swapTriangleWinding(tri2);
-        }
+        // Triangle 1: (Valid1, Valid2, Intersection between Valid1 and Invalid)
+        Vector3.copyTo(v1_mod, tri1.p1);
+        Vector3.copyTo(v2_mod, tri1.p2);
+        const t1 = MathUtils.getPlaneIntersectionFactor(z_near, v1_mod.z, v0.z);
+        Vector3.lerp(v1_mod, v0, t1, tri1.p3);
+        tri1.color = triColor;
+
+        // Triangle 2: (Intersection1, Valid2, Intersection between Valid2 and Invalid)
+        Vector3.copyTo(tri1.p3, tri2.p1);
+        Vector3.copyTo(v2_mod, tri2.p2);
+        const t2 = MathUtils.getPlaneIntersectionFactor(z_near, v2_mod.z, v0.z);
+        Vector3.lerp(v2_mod, v0, t2, tri2.p3);
+        tri2.color = triColor;
       }
     }
-  }
-
-  private swapTriangleWinding(tri: CameraSpaceTriangle) {
-    Vector3.copyTo(tri.p1, this._workVec3);
-    Vector3.copyTo(tri.p2, tri.p1);
-    Vector3.copyTo(this._workVec3, tri.p2);
   }
 
   /**
